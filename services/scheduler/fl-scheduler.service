@@ -1,0 +1,24 @@
+[Unit]
+Description=Fletcherlake scheduler
+After=network-online.target headscale.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fl-scheduler
+Group=fl-scheduler
+WorkingDirectory=/opt/fl
+EnvironmentFile=/etc/fl/scheduler.env
+ExecStart=/opt/fl/.pixi/envs/default/bin/fl-scheduler
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

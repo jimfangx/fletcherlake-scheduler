@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fletcherlake-platform"
+version = "0.1.0"
+description = "Durable silicon bringup agents and remote scheduling"
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.10,<3", "fastapi>=0.115,<1", "uvicorn>=0.34,<1",
+  "httpx>=0.28,<1", "typer>=0.15,<1", "PyYAML>=6,<7",
+  "psutil>=6,<8", "textual>=1,<7", "websockets>=14,<16",
+  "SQLAlchemy>=2.0,<3", "alembic>=1.14,<2", "psycopg[binary]>=3.2,<4",
+  "google-auth[requests]>=2.38,<3",
+  "cryptography>=44,<51",
+]
+
+[project.scripts]
+fl-agent = "fl_agent.daemon:main"
+fl-retention = "fl_agent.retention:main"
+fl-scheduler = "fl_scheduler.server:main"
+fl-client = "fl_client.main:app"
+fl-transfer-gateway = "fl_gateway.server:main"
+fl-deploy = "fl_deploy.main:main"
+fl = "fl_cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "packages/fl-common/fl_common", "packages/fl-agent/fl_agent", "packages/fl-cli/fl_cli",
+  "packages/fl-cli/fl", "services/scheduler/fl_scheduler", "packages/fl-client/fl_client",
+  "services/transfer-gateway/fl_gateway",
+  "services/deployment/fl_deploy",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["context"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = [
+  "packages/fl-common", "packages/fl-agent", "packages/fl-cli", "services/scheduler",
+  "packages/fl-client", "services/transfer-gateway",
+  "services/deployment",
+]
+packages = ["fl_common", "fl_agent", "fl_cli", "fl", "fl_scheduler", "fl_client", "fl_gateway", "fl_deploy"]
+
+[[tool.mypy.overrides]]
+module = ["psutil", "yaml", "google.auth.*", "google.oauth2.*"]
+ignore_missing_imports = true

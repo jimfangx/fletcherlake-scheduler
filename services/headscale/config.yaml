@@ -1,0 +1,45 @@
+# Headscale 0.29.4. Replace public hostnames before installation.
+server_url: https://headscale.example.edu
+listen_addr: 127.0.0.1:8081
+metrics_listen_addr: 127.0.0.1:9091
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
+unix_socket: /run/headscale/headscale.sock
+unix_socket_permission: "0700"
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+    write_ahead_log: true
+    wal_autocheckpoint: 1000
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  auto_update_enabled: true
+  update_frequency: 3h
+disable_check_updates: true
+node:
+  expiry: 0
+  ephemeral:
+    inactivity_timeout: 30m
+policy:
+  mode: file
+  path: /etc/headscale/policy.json
+dns:
+  magic_dns: true
+  base_domain: fl.internal
+  override_local_dns: false
+  nameservers:
+    global: []
+    split: {}
+log:
+  level: info
+  format: json

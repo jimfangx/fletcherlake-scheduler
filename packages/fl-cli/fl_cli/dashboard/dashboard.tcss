@@ -1,0 +1,10 @@
+Screen { background: $surface; }
+#connection { padding: 1 2; height: auto; background: $panel; }
+TabbedContent { height: 1fr; }
+DataTable { height: 1fr; }
+Metrics { padding: 1 3; }
+Metrics Static { height: auto; margin-top: 1; }
+Metrics ProgressBar { width: 1fr; margin-bottom: 1; }
+JobDetails { align: center middle; }
+#job-details { width: 80%; height: 80%; padding: 1 2; border: thick $primary; background: $surface; }
+#close-details { margin-top: 1; }

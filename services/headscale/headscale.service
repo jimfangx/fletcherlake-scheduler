@@ -1,0 +1,27 @@
+[Unit]
+Description=Fletcherlake Headscale coordinator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=headscale
+Group=headscale
+ExecStart=/usr/local/bin/headscale --config /etc/headscale/config.yaml serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+StateDirectory=headscale
+StateDirectoryMode=0700
+RuntimeDirectory=headscale
+RuntimeDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/headscale /run/headscale
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

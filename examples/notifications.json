@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "mailgun": {
+    "domain": "mail.example.edu",
+    "sender": "bringup@example.edu",
+    "api_key": "REPLACE_WITH_MAILGUN_API_KEY",
+    "region": "us",
+    "operators": ["operator@example.edu"],
+    "include_owner": true
+  },
+  "webhooks": [
+    {
+      "channel": "slack",
+      "url": "https://hooks.slack.com/services/TCONFIGURED/BCONFIGURED/REPLACE_WITH_SLACK_SECRET"
+    },
+    {
+      "channel": "google_chat",
+      "url": "https://chat.googleapis.com/v1/spaces/CONFIGUREDSPACE/messages?key=REPLACE_WITH_CHAT_KEY&token=REPLACE_WITH_CHAT_TOKEN"
+    }
+  ],
+  "max_attempts": 8
+}

@@ -1,0 +1,122 @@
+.back-link {
+  font-size: 0.83rem;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+.detail-header {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 0.8rem;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+.detail-grid .panel {
+  margin-bottom: 0;
+}
+dl {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 2fr;
+  gap: 15px 24px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+dt {
+  color: #6e8384;
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.definition {
+  display: contents;
+}
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+.action p {
+  max-width: 350px;
+  font-size: 0.78rem;
+  margin: 8px 0;
+}
+.panel-note {
+  margin: 22px 26px;
+  font-size: 0.8rem;
+  color: #687f7f;
+  overflow-wrap: anywhere;
+}
+.panel-note code {
+  white-space: normal;
+}
+.timeline {
+  list-style: none;
+  padding: 0 26px;
+}
+.timeline li {
+  display: flex;
+  gap: 16px;
+  padding: 14px 0;
+  font-size: 0.82rem;
+}
+.timeline-dot {
+  width: 7px;
+  height: 7px;
+  background: #38898b;
+  border-radius: 100%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 14px;
+  background: #f1f5f2;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+details {
+  margin-top: 10px;
+}
+summary {
+  cursor: pointer;
+  color: #387678;
+}
+.enrollment-form {
+  display: flex;
+  gap: 18px;
+  align-items: end;
+  font-size: 0.84rem;
+}
+.grant {
+  padding: 24px;
+  border: 1px solid #aaccc5;
+  border-radius: 8px;
+  background: #f3f9f6;
+  margin-top: 26px;
+  font-size: 0.84rem;
+}
+.grant input {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+}
+.signin {
+  max-width: 620px;
+  margin: 15vh auto;
+  padding: 36px;
+}
+.signin h1 {
+  font-size: 2.5rem;
+}
+.signin .button {
+  margin-top: 20px;
+}
+.signin .quiet {
+  margin-left: 15px;
+}

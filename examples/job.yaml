@@ -1,0 +1,10 @@
+priority: 0
+resource_constraints:
+  soc: fletcherlake
+  fpga: xcvu9p
+run_timeout: 3600
+run_collateral_ttl: 30
+binary: ./build/hello.elf
+bitstream: ./build/top.bit
+force_reflash: false
+shmoo: null

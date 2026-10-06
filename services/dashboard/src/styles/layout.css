@@ -1,0 +1,88 @@
+.shell {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+.sidebar {
+  background: #152d35;
+  color: #eef4f1;
+  padding: 30px 22px;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+}
+.brand {
+  color: white;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-weight: 650;
+  font-size: 1.05rem;
+}
+.brand-mark {
+  border: 1px solid #75aba5;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #d6eae5;
+  background: #23454c;
+}
+small {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 400;
+  color: #677f82;
+  margin-top: 5px;
+}
+.brand small,
+.account small {
+  color: #a6c0bf;
+}
+.nav-label,
+.eyebrow {
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: #6b8788;
+}
+.nav-label {
+  margin: 38px 10px 12px;
+  color: #94afad;
+}
+nav a {
+  display: block;
+  padding: 12px 14px;
+  color: #c5d5d2;
+  border-radius: 7px;
+  margin: 3px 0;
+  font-size: 0.91rem;
+}
+nav a.active {
+  background: #2b484e;
+  color: #fff;
+}
+nav a:hover {
+  background: #233e46;
+  text-decoration: none;
+}
+.account {
+  margin-top: auto;
+  padding: 24px 8px 0;
+  border-top: 1px solid #395058;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+.account button {
+  color: #d2e4e0;
+  margin-top: 10px;
+}
+.workspace {
+  padding: 42px clamp(20px, 4vw, 64px);
+  max-width: 1600px;
+  width: 100%;
+}

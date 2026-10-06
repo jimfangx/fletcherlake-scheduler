@@ -1,0 +1,19 @@
+# Explicit mock inventory for development. Production boards must select lilikoi.
+boards:
+  - board_id: fletcherlake-0
+    backend: mock
+    num_vrails: 1
+    num_vsense: 1
+    num_isense: 1
+    clock_source: fpga
+    fpgas: [{model: xcvu9p}]
+    socs: [{name: fletcherlake}]
+  - board_id: fletcherlake-1
+    backend: mock
+    fpgas: [{model: xcvu9p}]
+    socs: [{name: fletcherlake}]
+  - null
+os: {name: Darwin, release: '15.0'}
+apple_model: Macmini9,1
+mac_address: '00:11:22:33:44:55'
+power_control: null

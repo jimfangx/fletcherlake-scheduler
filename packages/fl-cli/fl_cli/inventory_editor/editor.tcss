@@ -1,0 +1,13 @@
+Screen { background: $surface; }
+TabbedContent { height: 1fr; }
+TabPane { padding: 1 2; }
+Label { margin-top: 1; height: auto; }
+TextArea { height: 10; min-height: 5; margin-bottom: 1; }
+DataTable { height: 1fr; }
+.form-actions { height: auto; padding: 1 2; }
+.form-actions Button { margin-right: 2; }
+.form-heading { text-style: bold; margin-bottom: 1; }
+#inventory-error, #board-error { height: auto; max-height: 6; overflow-y: auto; color: $error; padding: 0 2; }
+BoardEditor { align: center middle; }
+#board-form { width: 90%; height: 90%; border: thick $primary; background: $surface; padding: 1 2; }
+#board-form TabbedContent { height: 1fr; min-height: 8; }

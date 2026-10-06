@@ -1,0 +1,25 @@
+[Unit]
+Description=Fletcherlake collateral transfer gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fl-transfer
+Group=fl-transfer
+WorkingDirectory=/opt/fl
+EnvironmentFile=/etc/fl/transfer-gateway.env
+ExecStart=/opt/fl/.pixi/envs/default/bin/fl-transfer-gateway
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fl-transfer
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+.pixi/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+.env
+node_modules/
+services/dashboard/test-results/
+services/dashboard/playwright-report/
