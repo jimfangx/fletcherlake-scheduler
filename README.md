@@ -106,6 +106,9 @@ and no dependency on smart-plug software.
 
 ## Scheduler deployment
 
+Start with the [complete deployment guide](docs/deployment-guide.md) for all components,
+Google Workspace credentials, AWS/GCP hosting and optional third-party integrations.
+
 See [Linux scheduler operations](docs/scheduler-operations.md) and
 [authentication](docs/authentication.md) for Google Workspace configuration, secret injection,
 database migrations, public API behavior, and the remaining integration boundaries.
