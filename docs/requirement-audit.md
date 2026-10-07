@@ -76,7 +76,7 @@ requirements outside the milestone headings.
 | 27 Remote client | `fl_client.main`, `api`, `monitor`, `results` | `test_remote_client.py`, `test_remote_monitor.py`, `test_terminal_submission.py`: all required commands, bounded live logs and terminal state/results |
 | 28 Twelve-step submission | Client receipts/submission, scheduler upload/delivery workers, gateway grants, Mac fetch/verify/enqueue | `test_terminal_submission.py`, `test_private_terminal.py`, `test_transfer_delivery.py`: bitstream+ELF, independent SHA checks, durable ACK before enqueue and lost-response resume without duplicate execution |
 | 29 Terminal authentication | `fl_client.auth`/`session`; scheduler login/sessions | `test_authentication.py`, `test_submission_login.py`: URL/code approval, missing/expired session login, rotating/revocable protected credentials |
-| 30 Groups/roles | Google verifier, delegated Directory adapter, bounded membership cache and owner/role checks | `test_google_verification.py`, `test_authentication.py`, `test_public_api.py`: non-member denial, issuer/audience/nonce validation and provider-outage denial; external providers injected |
+| 30 Groups/roles | Google verifier, group-owned Cloud Identity or delegated Directory adapter, bounded membership cache and owner/role checks | `test_cloud_identity_groups.py`, `test_google_verification.py`, `test_authentication.py`, `test_public_api.py`: non-member denial, direct membership/expiry, service-account signing without impersonation, issuer/audience/nonce validation and provider-outage denial; external providers intercepted/injected |
 | 31–32 Private network/nodes | Headscale config/policy, adapter and deployment renderer; cluster-specific tags | `test_private_network.py`, `test_private_bbcp.py`: real peers, cluster isolation, bounded ports, verified relay clients and source-fenced SSH, under normal and forced DERP paths |
 | 33 Enrollment | Admin tickets, scoped pre-auth keys, registration verification, encrypted replay receipts and revocation worker | `test_enrollment.py`, `test_headscale_adapter.py`, `test_macos_enrollment.py`, `test_retirement_retries.py`: role boundaries, enrollment races, lost replies and durable cleanup |
 | 34 License relay (optional per user correction) | Opt-in `license_relay` mapping; dedicated tag, fixed-port HAProxy and matching ACL/private DNS; omitted/null emits no relay files, license DNS or ACL/tag | `test_deployment_native.py`, `test_deployment_relay.py`: native parser and real two-port forwarding with denied interfaces/ports; actual BWRC checkout/release remains untested when enabled |
@@ -106,7 +106,7 @@ These are environment-dependent checks, not implementations silently omitted fro
 3. Install the rendered Linux bundles and validate actual systemd boot, certificate issuance,
    public/private listeners, production HTTPS DERP and real NAT/firewall traversal. Linux
    userspace transport adapters are test fixtures and are not evidence of native Mac networking.
-4. Configure Google Workspace OAuth/delegated Directory groups and notification destinations,
+4. Configure Google Workspace OAuth and group-owner Cloud Identity (or delegated Directory) access and notification destinations,
    then perform live acceptance. Current tests verify those boundaries with injected providers.
 5. Only if license forwarding is enabled, obtain authorized BWRC manager/vendor endpoints, fixed
    ports, hostname behavior and license

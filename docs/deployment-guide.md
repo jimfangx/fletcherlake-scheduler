@@ -36,12 +36,14 @@ there is no smart-plug service or token to configure.
 | Tailscale infrastructure clients | Both Linux hosts and each Mac | Administrator-issued Headscale joins | Yes |
 | Agent, workers, local SDK/CLI/TUI | Each Mac Mini | System launchd service | Yes |
 | Remote client, BBCP and OpenSSH | User Linux/Chipyard or Mac host | User-owned client credentials | For terminal submission |
-| Google OAuth + Workspace Directory/Groups | Google project and Workspace organization | OAuth client and delegated service-account JSON | Yes |
+| Google OAuth + Workspace Groups | Google project and Workspace organization | OAuth client and group-owner service-account JSON (or delegated Directory) | Yes |
 | Mailgun, Slack, Google Chat | External providers; workers run in scheduler | Optional protected notification JSON | No |
 | BWRC license relay | Additional BWRC-connected Linux host | HAProxy and explicit private license ports | No |
 
-You need domain/DNS control, Linux administrator access, Mac administrator access, and a
-Workspace super administrator who can authorize Directory delegation. The Google project is
+You need domain/DNS control, Linux administrator access, Mac administrator access, and ownership
+of the Workspace groups used for access. The group-owner option below does not require
+Workspace domain-wide delegation or a super administrator to authorize a client ID, provided
+your organization already allows the required Groups operations. The Google project is
 needed even if the hosts run on AWS or on premises. AWS hosting is not required, and GCP
 Compute Engine hosting is not required merely to use Google login.
 
@@ -100,16 +102,16 @@ Attach a dedicated runtime service account if a VM must access cloud resources. 
 access scopes as well. The deployment process must retrieve and install those files.
 
 `gcloud auth application-default login` is for local tools that use Application Default
-Credentials (ADC), not a prerequisite for the scheduler. Its Workspace Directory adapter
-currently requires a service-account JSON key and does not substitute VM ADC credentials.
-Keep that delegated identity separate from DNS/secret-management identities.
+Credentials (ADC), not a prerequisite for the scheduler. Its Google Groups adapters
+currently require a service-account JSON key and do not substitute VM ADC credentials.
+Keep that group-reading identity separate from DNS/secret-management identities.
 See [Compute Engine workload authentication](https://docs.cloud.google.com/compute/docs/access/app-authentication-methods),
 [Secret Manager authentication](https://docs.cloud.google.com/secret-manager/docs/authentication),
 and [secret access roles](https://docs.cloud.google.com/secret-manager/docs/access-control).
 
 ## 3. Google login and Groups authorization
 
-There are two distinct credentials: a web OAuth client for people and a delegated service
+There are two distinct credentials: a web OAuth client for people and a service
 account for group membership checks. A generic Google API key cannot replace either.
 
 ### OAuth web client
@@ -123,12 +125,63 @@ account for group membership checks. A generic Google API key cannot replace eit
    the hostname. No localhost terminal callback or television/device OAuth client is needed.
 5. Save the client ID and secret as `FL_GOOGLE_CLIENT_ID` and `FL_GOOGLE_CLIENT_SECRET`.
 
-The current scheduler requests `openid email`. Directory scopes belong to the service account,
+The current scheduler requests `openid email`. Group-reading scopes belong to the service account,
 not this browser consent flow. The React application never receives the OAuth client secret.
 See Google's [consent setup](https://developers.google.com/workspace/guides/configure-oauth-consent)
 and [credential creation](https://developers.google.com/workspace/guides/create-credentials).
 
-### Workspace Directory service account
+### Group-owner service account (no domain-wide delegation)
+
+Use this option if you can create Workspace groups and make yourself their owner. Google
+documents that a service account can be an **owner of specific groups** without receiving the
+domain-wide Group Administrator role. This is separate from granting IAM roles in GCP.
+
+1. Ensure these are Workspace **Groups for Business**, with end-user group creation already
+   allowed. Consumer `@googlegroups.com` groups are not supported by this API.
+2. Enable **Cloud Identity API** (`cloudidentity.googleapis.com`) in your Google project:
+
+   ```sh
+   gcloud services enable cloudidentity.googleapis.com --project YOUR_PROJECT_ID
+   ```
+
+3. Create a dedicated service account in that project. Do not enable domain-wide delegation
+   or impersonate your own email. Record its email, for example
+   `fl-group-reader@YOUR_PROJECT_ID.iam.gserviceaccount.com`.
+4. Create the user/operator/admin groups described below. As their owner, **directly add** the
+   service-account email to each configured group and give it the **Owner** role. Do not send
+   an invitation requiring the service account to sign in. Keep yourself as an owner too.
+5. Create/download a JSON key for this service account. Install it on the scheduler as
+   `/etc/fl/google-groups.json`, owned by `fl-scheduler`, mode `0600`. Use a regular file;
+   symlinks and files owned by another account are rejected.
+6. Configure:
+
+   ```ini
+   FL_GOOGLE_GROUPS_BACKEND=cloud_identity
+   FL_GOOGLE_GROUPS_CREDENTIALS=/etc/fl/google-groups.json
+   ```
+
+This backend requests only `https://www.googleapis.com/auth/cloud-identity.groups.readonly`.
+It does not need `FL_GOOGLE_DELEGATED_ADMIN`, `FL_GOOGLE_DIRECTORY_CREDENTIALS`, Admin SDK,
+or Admin-console authorization of the numeric client ID. It checks **direct human membership**;
+add each person directly to a role group rather than relying on nested groups. Being a group
+owner also counts as membership. A service-account owner itself cannot log in as a human.
+
+Your Workspace policy must permit adding the service-account email (which is outside your
+Workspace email domain), and your Cloud project must permit service-account key creation.
+Group ownership cannot override an organization policy. If either action is blocked, ask the
+organization administrator for that specific permission; super-admin domain-wide delegation
+is not a requirement of this backend. Groups for Business must already be enabled; enabling
+it or changing domain sharing policy requires Workspace administrator access.
+
+See Google's [Groups API authentication setup](https://docs.cloud.google.com/identity/docs/how-to/setup),
+[supported groups](https://docs.cloud.google.com/identity/docs/groups),
+[group lookup](https://docs.cloud.google.com/identity/docs/reference/rest/v1/groups/lookup),
+and [membership resources and expiry](https://docs.cloud.google.com/identity/docs/reference/rest/v1/groups.memberships).
+
+### Optional delegated Workspace Directory service account
+
+Existing deployments can keep the Directory backend. This alternative requires an
+administrator-authorized delegation; skip it when using the group-owner option above.
 
 1. Enable **Admin SDK API** (`admin.googleapis.com`) in the Google project.
 2. Create a dedicated service account, enable/configure Workspace domain-wide delegation,
@@ -141,9 +194,10 @@ and [credential creation](https://developers.google.com/workspace/guides/create-
 5. Set `FL_GOOGLE_DELEGATED_ADMIN` to an actual Workspace administrator with permission to
    read group membership. Cloud IAM roles alone do not provide Workspace privileges.
 
-This JSON key is required by the current implementation. If organization policy prevents key
-creation or delegation, resolve it with the administrator; ADC/WIF is not an implemented
-drop-in replacement for this adapter. Delegation changes can take time to propagate.
+Set `FL_GOOGLE_GROUPS_BACKEND=directory` (the compatibility default),
+`FL_GOOGLE_DIRECTORY_CREDENTIALS=/etc/fl/google-directory.json`, and the delegated administrator
+variable above. This backend requires its JSON key; ADC/WIF is not an implemented replacement.
+Delegation changes can take time to propagate.
 See [domain-wide delegation](https://developers.google.com/identity/protocols/oauth2/service-account)
 and [Directory scopes](https://developers.google.com/workspace/admin/directory/v1/guides/authorizing).
 
@@ -157,9 +211,10 @@ but an admin group is needed for the normal enrollment UI. Admin/operator member
 lower-role permissions. Set `FL_GOOGLE_WORKSPACE_DOMAIN=example.edu` to restrict login to the
 expected Workspace domain, or omit it for the application's broader supported identity policy.
 
-Membership is checked through Directory's
+The Cloud Identity backend resolves the group, looks up the direct member and verifies their
+membership roles and expiry. The delegated backend uses Directory's
 [`members.hasMember`](https://developers.google.com/workspace/admin/directory/reference/rest/v1/members/hasMember).
-For first deployment, use direct membership and validate non-member denial. Membership cache
+For first deployment, validate your own membership and non-member denial. Membership cache
 expiry is at most 60 seconds; an expired positive result is not reused during provider outages.
 
 ## 4. DNS, TLS and firewall configuration
@@ -450,8 +505,8 @@ FL_BIND_PORT=8080
 FL_PUBLIC_ORIGIN=https://scheduler.example.edu
 FL_GOOGLE_CLIENT_ID=REPLACE_WITH_WEB_CLIENT_ID
 FL_GOOGLE_CLIENT_SECRET=REPLACE_WITH_WEB_CLIENT_SECRET
-FL_GOOGLE_DIRECTORY_CREDENTIALS=/etc/fl/google-directory.json
-FL_GOOGLE_DELEGATED_ADMIN=directory-admin@example.edu
+FL_GOOGLE_GROUPS_BACKEND=cloud_identity
+FL_GOOGLE_GROUPS_CREDENTIALS=/etc/fl/google-groups.json
 FL_GOOGLE_WORKSPACE_DOMAIN=example.edu
 FL_GOOGLE_USERS_GROUP=fl-users@example.edu
 FL_GOOGLE_OPERATORS_GROUP=fl-operators@example.edu
@@ -470,7 +525,7 @@ FL_DASHBOARD_DIR=/opt/fl/services/dashboard/dist
 ```
 
 URL-encode special characters in database passwords. This is a systemd environment file; do
-not blindly source it as a shell script. Install the Directory JSON key with the ownership/mode
+not blindly source it as a shell script. Install the Groups JSON key with the ownership/mode
 from section 3. Build the optional dashboard from the checkout:
 
 ```sh
@@ -609,7 +664,7 @@ Workspace policy may require administrator approval. See
 Use a Chat space in a Workspace organization that permits incoming webhooks. In the space's
 **Apps & integrations → Webhooks**, create an incoming webhook and save its full URL, including
 `key` and `token`, in a `channel: google_chat` entry. This is separate from the scheduler's
-Google OAuth/Directory credentials; a Google Chat bot service is not required. See
+Google OAuth/Groups credentials; a Google Chat bot service is not required. See
 [Google Chat webhook setup](https://developers.google.com/workspace/chat/quickstart/webhooks).
 
 ### Enable notification workers
@@ -644,9 +699,9 @@ remains documented in [the audit](requirement-audit.md).
 | Symptom | Check |
 | --- | --- |
 | OAuth redirect mismatch | Exact scheme/hostname/path, web client, `FL_PUBLIC_ORIGIN` |
-| Group lookup unavailable | Admin SDK enabled, delegated client ID/scope, admin privileges, JSON key, outbound HTTPS |
+| Group lookup unavailable | Selected backend's API enabled, protected JSON key, outbound HTTPS; Cloud Identity: service account is an owner of every configured group; Directory: delegated client ID/scope and admin privileges |
 | Signed-in user forbidden | Direct membership in configured groups; audience/domain restriction |
-| Scheduler refuses startup | Missing environment values, schema revision, Directory file mode, dashboard build |
+| Scheduler refuses startup | Missing environment values, schema revision, Groups credential file ownership/mode, dashboard build |
 | nginx cannot bind private listener | Actual allocated Headscale address, tailscaled startup and final manifest |
 | Gateway SSH denied | Host key pin, issued grant, correct source, account lock/shell, StrictModes, listener conflict |
 | BBCP stalls | TCP data range in cloud/host firewall, matching manifest/ACL, dedicated range, credential deadline |

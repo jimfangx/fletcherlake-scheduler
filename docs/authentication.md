@@ -9,9 +9,23 @@ discarded; platform clients receive opaque scheduler credentials.
 Google Groups is the access authority. Configure a required user group and optional operator
 and administrator groups. Higher roles include lower-role capabilities. Each authenticated
 request checks current membership through a cache with a maximum lifetime of 60 seconds.
-Expired membership is never reused during Directory outages. PostgreSQL user records are
+Expired membership is never reused during Google Groups outages. PostgreSQL user records are
 profiles and ownership metadata, not an allowlist. Administrators cannot grant membership by
 editing this database; use Google Groups.
+
+Choose `FL_GOOGLE_GROUPS_BACKEND=cloud_identity` and set `FL_GOOGLE_GROUPS_CREDENTIALS`
+to a service-owned regular mode-0600 JSON key for a service account made an owner of each
+configured Workspace group. This uses Cloud Identity's read-only Groups scope and **direct**
+human membership, including owner/manager roles and member expiry. Nested-group membership
+does not authorize access. The account does not impersonate an administrator or require
+domain-wide delegation. Groups for Business must be enabled and organization policy must
+allow that service-account owner. The scheduler rejects inaccessible groups, malformed
+responses and redirects; absent direct members are denied.
+
+The compatibility default `directory` retains Admin SDK Directory's delegated administrator
+adapter and its existing `FL_GOOGLE_DIRECTORY_CREDENTIALS` / `FL_GOOGLE_DELEGATED_ADMIN`
+configuration. See [the deployment guide](deployment-guide.md#3-google-login-and-groups-authorization)
+for both configurations and [Google's authentication setup](https://docs.cloud.google.com/identity/docs/how-to/setup).
 
 Browser login uses a one-use PostgreSQL state record bound to a separate secure, HttpOnly
 cookie, plus PKCE and nonce. The callback accepts only two fixed return paths. Session cookies
@@ -52,5 +66,8 @@ Google verifier is also exercised with locally signed RSA tokens and an injected
 response, including bad signatures, audiences, issuers, and expiration. They prove one-use
 state binding, code approval, membership removal, cache expiration, provider outages, role
 boundaries, ownership checks, token rotation/expiry/revocation, and secret-free inventory.
-They do not claim a live Google Workspace integration: deployer-provided credentials and
-authorized delegation are required for that acceptance check.
+Cloud Identity tests also sign service-account assertions without an impersonated subject,
+intercept the membership API, and verify direct role checks, expiry/removal, failure handling,
+credential-file protection and real PostgreSQL session issuance. They do not claim a live
+Google Workspace integration: deployer-provided credentials and authorized group access
+are required for that acceptance check.

@@ -27,8 +27,10 @@ secret manager:
 | `FL_PUBLIC_ORIGIN` | Public HTTPS origin without a path/trailing slash |
 | `FL_GOOGLE_CLIENT_ID` | Google web OAuth client ID |
 | `FL_GOOGLE_CLIENT_SECRET` | OAuth client secret |
-| `FL_GOOGLE_DIRECTORY_CREDENTIALS` | Mode-0600 service-account JSON file |
-| `FL_GOOGLE_DELEGATED_ADMIN` | Workspace administrator identity for delegation |
+| `FL_GOOGLE_GROUPS_BACKEND` | `cloud_identity` for group-owner access; `directory` is the compatibility default |
+| `FL_GOOGLE_GROUPS_CREDENTIALS` | Cloud Identity only: service-owned, regular mode-0600 service-account JSON file |
+| `FL_GOOGLE_DIRECTORY_CREDENTIALS` | Directory only: mode-0600 service-account JSON file |
+| `FL_GOOGLE_DELEGATED_ADMIN` | Directory only: Workspace administrator identity for delegation |
 | `FL_GOOGLE_WORKSPACE_DOMAIN` | Optional enforced ID-token hosted domain |
 | `FL_GOOGLE_USERS_GROUP` | Required authorized user group |
 | `FL_GOOGLE_OPERATORS_GROUP` | Optional operator group |
@@ -48,7 +50,14 @@ secret manager:
 | `FL_BIND_HOST` / `FL_BIND_PORT` | Defaults: `127.0.0.1` / `8080` |
 
 Register the exact redirect URL `https://YOUR_HOST/api/auth/callback` in Google's OAuth client.
-Authorize the service account through Workspace domain-wide delegation for the scope
+For `cloud_identity`, enable the Cloud Identity API and make the service account an owner of
+each configured Workspace group. It reads direct human membership using the read-only scope
+`https://www.googleapis.com/auth/cloud-identity.groups.readonly`; domain-wide delegation and
+administrator impersonation are unnecessary. Groups for Business and organization policies
+must already permit this setup. See [the deployment steps](deployment-guide.md#group-owner-service-account-no-domain-wide-delegation)
+and [Google's setup documentation](https://docs.cloud.google.com/identity/docs/how-to/setup).
+
+For the optional `directory` backend, authorize the service account through Workspace domain-wide delegation for the scope
 `https://www.googleapis.com/auth/admin.directory.group.member.readonly`, and enable the
 Admin SDK Directory API. The delegated administrator must be able to read group membership.
 See [Google's credential guidance](https://developers.google.com/workspace/guides/create-credentials),

@@ -13,7 +13,8 @@ from sqlalchemy import text
 from .artifacts.api import Downloads
 from .artifacts.service import ExportService
 from .auth.api import AuthAPI
-from .auth.google import GoogleDirectory, GoogleIdentity, GoogleSettings
+from .auth.google import GoogleIdentity, GoogleSettings
+from .auth.group_directory import load_group_directory
 from .auth.groups import GroupAuthorizer, GroupSettings
 from .auth.login import Login
 from .auth.sessions import Sessions
@@ -44,9 +45,6 @@ def application() -> FastAPI:
         callback_url=origin + "/api/auth/callback",
         workspace_domain=os.environ.get("FL_GOOGLE_WORKSPACE_DOMAIN"),
     )
-    directory_file = Path(required("FL_GOOGLE_DIRECTORY_CREDENTIALS"))
-    if directory_file.stat().st_mode & 0o077:
-        raise RuntimeError("Directory service-account credentials must have mode 0600")
     db = Database(required("FL_DATABASE_URL"))
     # Schema upgrades are an explicit deployment step, never a side effect of HTTP requests.
     with db.transaction() as transaction:
@@ -55,7 +53,7 @@ def application() -> FastAPI:
             raise RuntimeError("Run the scheduler Alembic upgrade before starting this service")
     client = httpx.AsyncClient(timeout=15)
     provider = GoogleIdentity(settings, client)
-    directory = GoogleDirectory(directory_file, required("FL_GOOGLE_DELEGATED_ADMIN"), client)
+    directory = load_group_directory(client)
     groups = GroupAuthorizer(
         directory,
         GroupSettings(
