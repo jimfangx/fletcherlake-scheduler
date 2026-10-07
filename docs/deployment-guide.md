@@ -97,6 +97,144 @@ gcloud services enable dns.googleapis.com secretmanager.googleapis.com
 
 Provision two Linux x86-64 VMs, persistent disks, reserved external addresses and targeted VPC
 firewall rules. The manifest again uses actual NIC addresses for public-facing bind addresses.
+
+For an initial lab deployment with modest job/transfer concurrency, use these starting sizes.
+These are sizing recommendations, not measured production capacity guarantees:
+
+| VM | Machine type | vCPUs / memory | Boot disk | Separate data disk |
+| --- | --- | --- | --- | --- |
+| `fl-scheduler`: scheduler, PostgreSQL, dashboard, Headscale and nginx | `e2-standard-2` | 2 / 8 GB | 50 GiB `pd-balanced` | 100 GiB `pd-balanced` for PostgreSQL and service state |
+| `fl-transfer-gateway`: BBCP/OpenSSH, Tailscale and nginx | `e2-standard-4` | 4 / 16 GB | 50 GiB `pd-balanced` | Initially 500 GiB `pd-balanced` for `/var/lib/fl-transfer` |
+
+Use Ubuntu 24.04 LTS x86-64, regular non-Spot VMs, and the same region near the physical Macs.
+Mount data disks before creating service state or starting services. Ensure mounts are present
+on subsequent boots before their services start. Back up PostgreSQL independently of gateway
+staging; increasing disk size or VM resources does not provide service redundancy.
+
+The scheduler coordinates work; execution happens on the Macs. The gateway needs more CPU
+headroom for encrypted transfers and SHA verification, and more storage for the actual payloads.
+Its input files remain until one day after the original upload grant, including after a Mac
+downloads them. Exported results have their own retention deadlines. Size its data disk for
+**all uploads in that one-day window + all retained exports + at least 30% free space**;
+500 GiB is only a starting point. Monitor disk usage, CPU and actual transfer throughput.
+
+Google lists `e2-standard-2` and `e2-standard-4` with maximum egress bandwidth of up to 4 and
+8 Gbps respectively. These are VM ceilings, not BBCP speed guarantees: disk performance,
+encryption, shared uplinks and the Mac's network can limit transfers first. Balanced disk
+throughput also depends on provisioned capacity and VM limits. For sustained transfer needs,
+measure the bottleneck before changing the gateway's machine type or disk.
+See [E2 machine specifications](https://docs.cloud.google.com/compute/docs/general-purpose-machines#e2_machine_types)
+and [Persistent Disk performance](https://docs.cloud.google.com/compute/docs/disks/performance).
+
+#### GCP NIC and VM creation settings
+
+In Compute Engine's VM creation form, use the machine/disk sizes above and these settings.
+Create a custom-mode VPC named `fl-vpc` and a regional subnet named `fl-subnet` first. Choose
+an unused subnet CIDR, for example `10.80.0.0/24`, that does not overlap campus/Mac networks
+or Headscale's `100.64.0.0/10`. Both VMs use that subnet and the same selected region.
+
+| Setting | `fl-scheduler` | `fl-transfer-gateway` |
+| --- | --- | --- |
+| OS image / architecture | Ubuntu 24.04 LTS / x86-64 | Ubuntu 24.04 LTS / x86-64 |
+| Provisioning model | Standard (non-Spot) | Standard (non-Spot) |
+| GCP network interfaces | One: `nic0` | One: `nic0` |
+| VPC / subnet | `fl-vpc` / `fl-subnet` | `fl-vpc` / `fl-subnet` |
+| NIC type | VirtIO-Net (E2 default) | VirtIO-Net (E2 default) |
+| IP stack | IPv4 only | IPv4 only |
+| Primary internal IPv4 | Reserve `10.80.0.10` in the example subnet | Reserve `10.80.0.11` in the example subnet |
+| External IPv4 | Separate reserved regional static address | Separate reserved regional static address |
+| Network service tier | Premium; match the external address's tier | Premium; match the external address's tier |
+| Network tag | `fl-scheduler` | `fl-transfer-gateway` |
+| IP forwarding / alias IP ranges | Off / none | Off / none |
+| Allow HTTP traffic checkbox | Unchecked | Unchecked |
+| Allow HTTPS traffic checkbox | Unchecked when using the explicit rules below | Unchecked when using the explicit rules below |
+
+**HTTPS must still be allowed on both VMs.** The table uses explicitly targeted firewall rules
+instead of the convenience checkboxes. If you use the console's **Allow HTTPS traffic**
+checkbox instead, verify that it installs a TCP-443 allow rule on this VPC for these VMs.
+Leave **Allow HTTP traffic** unchecked: the supplied nginx configuration has no port-80
+listener, and certificate issuance/renewal uses DNS-01. If you later want HTTP redirects,
+add both a deliberate nginx port-80 redirect and its firewall rule.
+
+Tailscale creates `tailscale0` inside Linux after joining Headscale. Its allocated `100.64.x.x`
+address is not another GCP NIC or a GCP subnet address. Keep the subnet/exit-route settings
+disabled as described in section 6. The static external IPv4 on each VM provides internet
+connectivity; nginx terminates TLS directly on the host.
+
+GCP maps an external IPv4 to the NIC's primary internal IPv4. Use the **internal NIC address**
+for this repository's `public_ip` listener fields, and the actual Headscale address for
+`private_ip`. For the example subnet:
+
+| Address use | Scheduler | Gateway |
+| --- | --- | --- |
+| Deployment YAML `public_ip` (local public-facing bind) | `10.80.0.10` | `10.80.0.11` |
+| Deployment YAML `private_ip` | Actual `tailscale ip -4` result | Actual `tailscale ip -4` result |
+| Public DNS A records | `scheduler` and `headscale` names → scheduler's reserved external IPv4 | `transfer` name → gateway's reserved external IPv4 |
+| Headscale private DNS | Agent name → scheduler's Headscale IPv4 | Internal gateway name → gateway's Headscale IPv4 |
+
+The name `public_ip` describes the listener's purpose; do not try to bind nginx or SSH to an
+external IPv4 that is absent from the guest's interfaces. Section 7's renderer installs these
+local binds while the public gateway endpoint uses its public DNS hostname.
+See [GCP IP addresses](https://docs.cloud.google.com/compute/docs/ip-addresses),
+[external IPv4 NAT behavior](https://docs.cloud.google.com/nat/docs/public-nat),
+and [NIC defaults](https://docs.cloud.google.com/compute/docs/networking/network-overview).
+
+#### GCP firewall rules
+
+Create these **ingress Allow** VPC firewall rules at priority `1000`, targeted by the VM network
+tags above. Use `0.0.0.0/0` only for the explicitly public services. `ADMIN_EGRESS_CIDR`
+means your actual administrator/VPN public source range, usually a single IPv4 `/32`.
+
+| Rule | Target tag(s) | Allowed protocol/ports | Source IPv4 ranges | Purpose |
+| --- | --- | --- | --- | --- |
+| `fl-public-https` | `fl-scheduler`, `fl-transfer-gateway` | TCP `443` | `0.0.0.0/0` | Scheduler/login, Headscale coordination and gateway verification |
+| `fl-gateway-transfer` | `fl-transfer-gateway` | TCP `22`, `5000-5099` | `0.0.0.0/0` | Scoped BBCP SSH/bootstrap and payloads from arbitrary Chipyard hosts |
+| `fl-tailnet-direct` | `fl-scheduler`, `fl-transfer-gateway` | UDP `41641` | `0.0.0.0/0` | Recommended for direct encrypted Tailscale peer connections; confirm tailscaled's actual port |
+| `fl-scheduler-admin` | `fl-scheduler` | TCP `22` | `ADMIN_EGRESS_CIDR` | Administrative SSH |
+| `fl-gateway-admin` | `fl-transfer-gateway` | TCP `2222` | `ADMIN_EGRESS_CIDR` | Administrative SSH after moving the OS daemon off transfer port 22 |
+
+On a fresh gateway, initially permit administrative TCP 22 **only from `ADMIN_EGRESS_CIDR`**.
+Move the OS SSH daemon to port 2222 and verify a second login there before enabling the public
+`fl-gateway-transfer` rule or starting the dedicated transfer SSH daemon. Check distro SSH
+socket units as well as `sshd_config` so the OS daemon actually releases port 22. Port 2222
+is a management choice for this plan; transfer metadata continues to use port 22. The
+console's default SSH connection targets port 22; use an SSH client configured for 2222 to
+administer the completed gateway. Keep the initial session open until the new path works.
+
+For example, after moving administrative SSH and starting the dedicated transfer daemon, the
+gateway's final public transfer rule can be created with:
+
+```sh
+gcloud compute firewall-rules create fl-gateway-transfer \
+  --network=fl-vpc --direction=INGRESS --priority=1000 --action=ALLOW \
+  --target-tags=fl-transfer-gateway --source-ranges=0.0.0.0/0 \
+  --rules=tcp:22,tcp:5000-5099
+```
+
+Adjust the BBCP range if the manifest changes. The custom VPC keeps implied ingress denial
+for other ports; ensure inherited organization policies and any additional project rules
+agree. In particular, do not add a general all-ports internal rule or a world-accessible
+administrative SSH rule. PostgreSQL `5432`, application `8080/8081`, and Headscale metrics/gRPC
+`9091/50443` stay off the VPC ingress allow list and bind to loopback where configured.
+
+Keep the normal implied outbound allow policy for initial deployment. Outbound traffic needs
+DNS, Google APIs and package/certificate/provider endpoints; Tailscale also needs outbound
+HTTPS to external DERP servers, UDP 3478 for STUN and UDP to peers' advertised ports, which
+can vary with NAT. If organization policy restricts egress, allow those dependencies explicitly.
+The shipped Headscale configuration has its embedded DERP server disabled, so it needs no
+public inbound STUN/3478 listener.
+
+Mirror the required listeners in any host firewall. GCP sees the encrypted Tailscale transport;
+inner connections to the `100.64.x.x` services are controlled by Headscale ACLs and the Linux
+host firewall on `tailscale0`. Allow private scheduler HTTPS and private gateway HTTPS/SSH/BBCP
+according to the rendered ACLs. Verify direct and DERP fallback paths before production file
+transfers; the VPC TCP-443 rule alone does not establish private agent connectivity.
+See [GCP firewall rules](https://docs.cloud.google.com/firewall/docs/firewalls),
+[rule creation flags](https://docs.cloud.google.com/sdk/gcloud/reference/compute/firewall-rules/create),
+and [Tailscale firewall ports](https://tailscale.com/docs/reference/faq/firewall-ports).
+
+#### GCP runtime credentials
+
 Attach a dedicated runtime service account if a VM must access cloud resources. Grant
 `roles/secretmanager.secretAccessor` on individual required secrets; configure suitable VM
 access scopes as well. The deployment process must retrieve and install those files.
@@ -261,6 +399,11 @@ off the public network. Macs initiate scheduler and transfer connections; no pub
 or incoming Mac SSH service is required. Permit the Tailscale transport needed for your topology;
 test both direct traffic and relay fallback. The shipped Headscale config uses external DERP
 servers and does not enable an embedded production DERP server.
+
+On GCP, use [the NIC/address settings](#gcp-nic-and-vm-creation-settings) and
+[per-role firewall rules](#gcp-firewall-rules) in section 2. Remove the distro's default nginx
+site when installing the rendered fragments so its wildcard/HTTP listeners do not add services
+outside this plan.
 
 The public BBCP payload hop is unencrypted. SSH protects its bootstrap, SHA checks verify
 integrity, and Headscale encrypts the private hop. Account for this when deciding which artifacts

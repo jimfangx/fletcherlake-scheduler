@@ -5,6 +5,9 @@ An optional license relay uses a BWRC-connected host only when forwarding is nee
 Mac agents continue using launchd; the Linux units below
 do not apply to them. See [Mac operations](macos-operations.md).
 
+For GCP VM sizes, NIC/address mapping, HTTP/HTTPS settings and per-role firewall rules,
+follow [the GCP deployment plan](deployment-guide.md#gcp-nic-and-vm-creation-settings).
+
 Copy `services/deployment/example.yaml` into your deployment inventory. Replace the example
 addresses and hostnames with the hosts' actual interface addresses and DNS names. Public
 addresses must differ from allocated Headscale addresses. Cloud hosts behind NAT should use
