@@ -133,6 +133,52 @@ Create a custom-mode VPC named `fl-vpc` and a regional subnet named `fl-subnet` 
 an unused subnet CIDR, for example `10.80.0.0/24`, that does not overlap campus/Mac networks
 or Headscale's `100.64.0.0/10`. Both VMs use that subnet and the same selected region.
 
+The `10.80.0.10` / `10.80.0.11` examples work only in that custom subnet. Selecting the
+regional subnet named `default` and entering either address produces **Requested IP is not
+within the range of subnetwork 'default'**. To fix this in the console:
+
+1. Open **VPC networks → Create VPC network**.
+2. Name it `fl-vpc` and choose **Custom** subnet creation.
+3. Add `fl-subnet` in the same region as your VMs, with IPv4 range `10.80.0.0/24`.
+4. In the internal-IP reservation form, select `fl-subnet`. Reserve `10.80.0.10` for the
+   scheduler and `10.80.0.11` for the gateway.
+5. In each VM's **Network interfaces → nic0** settings, select **Network: fl-vpc →
+   Subnetwork: fl-subnet** and its corresponding reserved internal address. Retry VM creation
+   with these selections; selecting `default` again will produce the same error.
+
+If `fl-vpc` and `fl-subnet` already exist, use them rather than recreating them.
+
+Equivalent commands for a fresh deployment, using the project selected above (replace the
+region before running; use the existing resources if already created):
+
+```sh
+FL_GCP_REGION=YOUR_VM_REGION
+gcloud compute networks create fl-vpc --subnet-mode=custom
+gcloud compute networks subnets create fl-subnet \
+  --network=fl-vpc --region="$FL_GCP_REGION" --range=10.80.0.0/24
+gcloud compute addresses create fl-scheduler-internal \
+  --region="$FL_GCP_REGION" --subnet=fl-subnet --addresses=10.80.0.10
+gcloud compute addresses create fl-gateway-internal \
+  --region="$FL_GCP_REGION" --subnet=fl-subnet --addresses=10.80.0.11
+```
+
+Alternatively, to keep the `default` subnet, select **Automatic** for the VM's internal IPv4
+address rather than entering `10.80.0.11`. For a stable internal address, reserve an available
+address within that subnet's actual CIDR or promote the assigned address to static. Inspect
+the subnet's range with:
+
+```sh
+gcloud compute networks subnets describe default \
+  --region=YOUR_VM_REGION --format='value(ipCidrRange)'
+```
+
+Select automatic internal-IP allocation or reserve an available address within that returned
+range. Use the resulting real NIC addresses in the deployment manifest and put all firewall
+rules on the VPC actually selected by the VMs. The dedicated `fl-vpc` is the plan's default;
+if reusing the GCP `default` network, review its existing broad SSH/internal firewall rules
+against the per-role rules below. See [subnet creation](https://docs.cloud.google.com/sdk/gcloud/reference/compute/networks/subnets/create)
+and [internal address reservation](https://docs.cloud.google.com/sdk/gcloud/reference/compute/addresses/create).
+
 | Setting | `fl-scheduler` | `fl-transfer-gateway` |
 | --- | --- | --- |
 | OS image / architecture | Ubuntu 24.04 LTS / x86-64 | Ubuntu 24.04 LTS / x86-64 |
@@ -845,6 +891,7 @@ remains documented in [the audit](requirement-audit.md).
 | Group lookup unavailable | Selected backend's API enabled, protected JSON key, outbound HTTPS; Cloud Identity: service account is an owner of every configured group; Directory: delegated client ID/scope and admin privileges |
 | Signed-in user forbidden | Direct membership in configured groups; audience/domain restriction |
 | Scheduler refuses startup | Missing environment values, schema revision, Groups credential file ownership/mode, dashboard build |
+| GCP requested IP outside subnetwork range | `10.80.0.x` requires the example `fl-subnet` (`10.80.0.0/24`); select it in both reservation and NIC forms, or use an address from the existing subnet's actual CIDR |
 | nginx cannot bind private listener | Actual allocated Headscale address, tailscaled startup and final manifest |
 | Gateway SSH denied | Host key pin, issued grant, correct source, account lock/shell, StrictModes, listener conflict |
 | BBCP stalls | TCP data range in cloud/host firewall, matching manifest/ACL, dedicated range, credential deadline |
