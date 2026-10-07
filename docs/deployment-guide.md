@@ -5,8 +5,8 @@ agents. The commands target fresh hosts; edit the central settings before runnin
 Use the same reviewed repository revision on all hosts. The renderer prepares files for review
 and installation; it does not provision cloud resources or modify running services.
 
-Follow sections 1–9 in order, choosing one cloud provisioning/DNS branch. The common `flssh`,
-`flput` and `flget` blocks execute the selected provider's transport commands. Sections 10/11
+Follow sections 1–9 in order, choosing one cloud provisioning branch and one DNS provider.
+The common `flssh`, `flput` and `flget` blocks execute the selected provider's transport commands. Sections 10/11
 run on physical Macs and user machines for either cloud; section 12 is optional. Fill the
 central settings once, preserve the protected operator state, and retain the resolved OS
 image IDs to reproduce the same deployment inputs. Google web OAuth client registration,
@@ -85,8 +85,13 @@ These commands provision billable infrastructure when you run them; this documen
 execute them. Install Google Cloud CLI for Google credential setup on either hosting provider, plus
 AWS CLI v2 for AWS hosting, `jq`, Python 3 and OpenSSH locally.
 
-Edit the following values once. The DNS zone must already be delegated at your registrar;
-`FL_DOMAIN` is the existing zone or a subdomain within it. Supply a reviewed full Git commit from your local checkout. Keep credentials outside the checkout.
+Edit the following values once. `FL_CLOUD` selects VM hosting; `FL_DNS_PROVIDER` independently
+selects authoritative DNS and certificate renewal. Keep an existing Cloudflare-managed domain
+on Cloudflare: use `FL_DNS_PROVIDER=cloudflare` and its existing zone ID, without creating a
+Cloud DNS/Route 53 zone or changing nameservers. `FL_DOMAIN` is your deployment subdomain,
+such as `fl.example.edu`; service names become `scheduler.fl.example.edu`,
+`headscale.fl.example.edu` and `transfer.fl.example.edu`. Supply a reviewed full Git commit
+from your local checkout. Keep credentials outside the checkout.
 
 ```sh
 set -euo pipefail
@@ -96,7 +101,9 @@ mkdir -p "$FL_STATE"
 chmod 700 "$FL_STATE"
 cat > "$FL_STATE/settings.env" <<'ENV'
 export FL_CLOUD=gcp                         # gcp or aws
+export FL_DNS_PROVIDER=cloudflare            # cloudflare, gcp or aws; independent of VM hosting
 export FL_DOMAIN=bringup.example.edu
+export FL_CF_ZONE_ID=REPLACE_WITH_CLOUDFLARE_ZONE_ID  # Only for Cloudflare DNS; usually the parent domain's zone
 export FL_VPC_CIDR=10.80.0.0/16
 export FL_SUBNET_CIDR=10.80.0.0/24
 export FL_SCHEDULER_NIC_IP=10.80.0.10
@@ -110,11 +117,11 @@ export FL_WORKSPACE_DOMAIN=example.edu
 export FL_GCP_PROJECT=REPLACE_WITH_GCP_HOSTING_PROJECT_ID
 export FL_GCP_REGION=us-west2
 export FL_GCP_ZONE=us-west2-a
-export FL_GCP_DNS_ZONE=REPLACE_WITH_EXISTING_MANAGED_ZONE_NAME
+export FL_GCP_DNS_ZONE=REPLACE_WITH_EXISTING_MANAGED_ZONE_NAME  # Only for GCP DNS
 export AWS_PROFILE=fl-admin
 export AWS_DEFAULT_REGION=us-west-2
 export FL_AWS_AZ=us-west-2a
-export FL_AWS_ZONE_ID=REPLACE_WITH_EXISTING_ROUTE53_ZONE_ID
+export FL_AWS_ZONE_ID=REPLACE_WITH_EXISTING_ROUTE53_ZONE_ID  # Only for AWS DNS
 ENV
 "${EDITOR:-vi}" "$FL_STATE/settings.env"
 source "$FL_STATE/settings.env"
@@ -136,6 +143,12 @@ assert re.fullmatch('[0-9a-f]{40}', os.environ['FL_REPO_REV'])
 assert re.fullmatch('[A-Za-z0-9-]{1,48}', os.environ['FL_DEPLOY_TOKEN'])
 assert 'REPLACE' not in os.environ['FL_DEPLOY_TOKEN']
 assert os.environ['FL_CLOUD'] in ('aws', 'gcp')
+assert os.environ['FL_DNS_PROVIDER'] in ('cloudflare', 'aws', 'gcp')
+if os.environ['FL_DNS_PROVIDER'] == 'aws':
+    assert os.environ['FL_CLOUD'] == 'aws', 'This Route 53 renewal branch uses an EC2 instance role'
+if os.environ['FL_DNS_PROVIDER'] == 'cloudflare':
+    assert re.fullmatch('[0-9a-f]{32}', os.environ['FL_CF_ZONE_ID'])
+assert '://' not in os.environ['FL_DOMAIN'] and not os.environ['FL_DOMAIN'].endswith('.')
 PYCHECK
 git cat-file -e "$FL_REPO_REV^{commit}"
 export FL_SSH_KEY="$FL_STATE/admin-ed25519"
@@ -293,11 +306,14 @@ aws ec2 import-key-pair --key-name fl-admin --public-key-material "fileb://$FL_S
 flsave
 ```
 
-Create a DNS-only VM instance role for unattended Route 53 certificate renewal. It can change
-only TXT challenge records under `FL_DOMAIN` in your existing hosted zone; it cannot edit A
-records or read application secrets. Operator DNS commands use your separate AWS profile.
+Run the following block for every AWS deployment; it always requires IMDSv2 and adds a
+DNS-only VM instance role only for `FL_DNS_PROVIDER=aws`. That role permits unattended
+Route 53 certificate renewal and can change only TXT challenge records under `FL_DOMAIN`
+in your existing hosted zone. Operator DNS commands use your separate AWS profile.
 
 ```sh
+FL_AWS_PROFILE_ARGS=(--metadata-options HttpTokens=required)
+if [ "$FL_DNS_PROVIDER" = aws ]; then
 cat > "$FL_STATE/ec2-trust.json" <<'JSON'
 {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}
 JSON
@@ -316,6 +332,8 @@ aws iam put-role-policy --role-name fl-certbot --policy-name fl-certbot-dns \
   --policy-document "file://$FL_STATE/certbot-policy.json"
 aws iam create-instance-profile --instance-profile-name fl-certbot
 aws iam add-role-to-instance-profile --instance-profile-name fl-certbot --role-name fl-certbot
+FL_AWS_PROFILE_ARGS+=(--iam-instance-profile Name=fl-certbot)
+fi
 ```
 
 Resolve and save the current Canonical Ubuntu 24.04 AMI before launching. Keep the saved AMI
@@ -342,7 +360,7 @@ for FL_ROLE in scheduler gateway; do
   aws ec2 run-instances --image-id "$FL_AWS_AMI" --instance-type "$FL_TYPE" --count 1 \
     --client-token "$FL_DEPLOY_TOKEN-$FL_ROLE" --key-name fl-admin \
     --subnet-id "$FL_AWS_SUBNET" --private-ip-address "$FL_IP" --security-group-ids "$FL_SG" \
-    --iam-instance-profile Name=fl-certbot --metadata-options HttpTokens=required \
+    "${FL_AWS_PROFILE_ARGS[@]}" \
     --block-device-mappings "file://$FL_STATE/$FL_ROLE-disks.json" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$FL_VM}]" \
     > "$FL_STATE/$FL_ROLE-instance.json"
@@ -483,7 +501,8 @@ JSON key is a separate identity configured in section 3.
 ```sh
 export FL_CLOUD=gcp
 gcloud config set project "$FL_GCP_PROJECT"
-gcloud services enable compute.googleapis.com dns.googleapis.com
+gcloud services enable compute.googleapis.com
+if [ "$FL_DNS_PROVIDER" = gcp ]; then gcloud services enable dns.googleapis.com; fi
 gcloud compute firewall-rules create fl-public-https --network=fl-vpc \
   --direction=INGRESS --priority=1000 --action=ALLOW --rules=tcp:443 \
   --source-ranges=0.0.0.0/0 --target-tags=fl-scheduler,fl-transfer-gateway
@@ -821,9 +840,95 @@ Use DNS-01 certificate validation so private listeners need no public HTTP endpo
 each name separately, or otherwise align the certificate directories with the rendered paths.
 
 Create the public DNS records from the operator workstation, choosing your DNS provider.
-The following defaults use Route 53 for AWS hosting and Cloud DNS for GCP hosting; a deployment
-can also use the other DNS provider if its certificate plugin and credentials match.
-Verify the existing zone's registrar delegation before requesting certificates.
+Run only the branch selected by `FL_DNS_PROVIDER`. Cloudflare or Cloud DNS can serve either
+AWS or GCP VMs; this runbook's Route 53 renewal branch uses an EC2 instance role and therefore
+requires AWS hosting. A zone must be authoritative before requesting certificates. If your
+domain/subdomain is already managed by Cloudflare, retain that setup and use the Cloudflare
+branch below. Leave the unused `FL_GCP_DNS_ZONE` and `FL_AWS_ZONE_ID` placeholders alone.
+
+### Cloudflare DNS on AWS or GCP
+
+Set `FL_DNS_PROVIDER=cloudflare` in `settings.env`. Find the **Zone ID** in the Cloudflare
+dashboard for the existing authoritative domain, usually `example.edu` even when
+`FL_DOMAIN=fl.example.edu`. Set `FL_CF_ZONE_ID` to that ID. You do not need a separate zone
+for the deployment subdomain or any delegation to Google/AWS. An already delegated subdomain
+zone should use its own authoritative zone instead of its parent.
+
+In **My Profile → API Tokens → Create Token**, create a token with **Zone → DNS → Edit**
+and **Zone → Zone → Read**, restricted to **Include → Specific zone → your authoritative zone**.
+Store it once at the hidden prompt below. This token lets the operator create the three
+service records and Certbot create/remove DNS-01 TXT challenges for automatic renewal.
+Zone scope includes the other records in that zone; Cloudflare's API token is separate from
+Google login/Groups credentials. If you restrict token source IPs, include your operator
+workstation and both VMs' reserved external IPs; keep the token valid for renewals.
+
+Keep all three service records **DNS only (gray cloud)** in this deployment. This exposes
+the reserved VM address directly for Headscale and the gateway's SSH/BBCP ports. Private
+agent/control records remain in Headscale; no public A records point to Headscale IPs.
+Do not put Cloudflare Access browser challenges in front of these service endpoints.
+
+**Operator commands, identical for AWS or GCP hosting:**
+
+```sh
+read -r -s -p 'Cloudflare zone-scoped API token: ' FL_INPUT
+printf '\n'
+printf 'dns_cloudflare_api_token = %s\n' "$FL_INPUT" > "$FL_STATE/certbot-cloudflare.ini"
+unset FL_INPUT
+chmod 600 "$FL_STATE/certbot-cloudflare.ini"
+python3 - "$FL_STATE/certbot-cloudflare.ini" <<'PY'
+import configparser
+import ipaddress
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+credentials = configparser.ConfigParser(interpolation=None)
+credentials.read_string('[cloudflare]\n' + Path(sys.argv[1]).read_text())
+token = credentials['cloudflare']['dns_cloudflare_api_token'].strip()
+assert token and not any(c.isspace() for c in token)
+zone_id = os.environ['FL_CF_ZONE_ID']
+assert re.fullmatch('[0-9a-f]{32}', zone_id)
+domain = os.environ['FL_DOMAIN'].lower()
+base = f'https://api.cloudflare.com/client/v4/zones/{zone_id}'
+def api(path='', payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    request = Request(base + path, data=data, headers={
+        'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'})
+    with urlopen(request, timeout=30) as response:
+        result = json.load(response)
+    if not result.get('success'):
+        raise RuntimeError(f"Cloudflare API failed: {result.get('errors')}")
+    return result['result']
+zone = api()['name'].lower()
+assert domain == zone or domain.endswith('.' + zone), 'FL_DOMAIN is outside the selected zone'
+records = []
+for service in ('scheduler', 'headscale', 'transfer'):
+    name = f'{service}.{domain}'
+    ip = os.environ['FL_GATEWAY_PUBLIC_IP' if service == 'transfer' else 'FL_SCHEDULER_PUBLIC_IP']
+    ipaddress.IPv4Address(ip)
+    # Check all names before creating any: do not duplicate/replace existing DNS records.
+    if api('/dns_records?' + urlencode({'name': name})):
+        raise RuntimeError(f'{name} already has records; review/update them in Cloudflare before continuing')
+    records.append({'type': 'A', 'name': name, 'content': ip, 'ttl': 300, 'proxied': False})
+for record in records:
+    api('/dns_records', record)
+    print(f"Created DNS-only A record: {record['name']} -> {record['content']}")
+PY
+```
+
+Creation assumes fresh service names. If the names already exist, review their addresses and
+proxy status in Cloudflare and skip the creation block once they match the deployment; do not
+run it blindly after partial creation. The token stays in a mode-0600 file and is not passed
+in shell/process arguments. It is installed root-only on both VMs for Certbot below.
+Sources: [Cloudflare token setup](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/),
+[DNS record API](https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/create/),
+[DNS-only proxy status](https://developers.cloudflare.com/dns/proxy-status/),
+and [Certbot Cloudflare credentials](https://certbot-dns-cloudflare.readthedocs.io/en/stable/).
+
+### Route 53 DNS on AWS
 
 **AWS / Route 53:**
 
@@ -839,6 +944,8 @@ FL_DNS_CHANGE=$(aws route53 change-resource-record-sets --hosted-zone-id "$FL_AW
   --change-batch "file://$FL_STATE/dns-records.json" --query ChangeInfo.Id --output text)
 aws route53 wait resource-record-sets-changed --id "$FL_DNS_CHANGE"
 ```
+
+### Cloud DNS on AWS or GCP
 
 **GCP / Cloud DNS**, for a new deployment with these A records not already present:
 
@@ -876,14 +983,19 @@ Sources: [Route 53 record changes](https://docs.aws.amazon.com/cli/latest/refere
 [zone IAM](https://docs.cloud.google.com/dns/docs/zones/iam-per-resource-zones),
 [Certbot Google permissions](https://certbot-dns-google.readthedocs.io/en/stable/).
 
-**Both providers:** install certificate tooling and issue certificates before Headscale bootstrap. Create the host's protected parameter file:
+### TLS installation for the selected DNS provider
+
+**Both hosting providers:** install certificate tooling and issue certificates before Headscale
+bootstrap. Create the host's protected parameter file and upload the selected DNS credential:
 
 ```sh
-printf 'FL_CLOUD=%q\nFL_DOMAIN=%q\n' "$FL_CLOUD" "$FL_DOMAIN" > "$FL_STATE/host.env"
+printf 'FL_DNS_PROVIDER=%q\nFL_DOMAIN=%q\n' "$FL_DNS_PROVIDER" "$FL_DOMAIN" > "$FL_STATE/host.env"
 for FL_ROLE in scheduler gateway; do
   flssh "$FL_ROLE" 'install -d -m 700 ~/fl-secrets'
   flput "$FL_ROLE" "$FL_STATE/host.env" fl-secrets/host.env
-  if [ "$FL_CLOUD" = gcp ]; then
+  if [ "$FL_DNS_PROVIDER" = cloudflare ]; then
+    flput "$FL_ROLE" "$FL_STATE/certbot-cloudflare.ini" fl-secrets/certbot-cloudflare.ini
+  elif [ "$FL_DNS_PROVIDER" = gcp ]; then
     flput "$FL_ROLE" "$FL_STATE/certbot-google.json" fl-secrets/certbot-google.json
   fi
 done
@@ -892,13 +1004,20 @@ for FL_ROLE in scheduler gateway; do
 source "$HOME/fl-secrets/host.env"
 FL_ROLE=$1
 sudo apt-get update
-sudo apt-get install -y nginx certbot python3-certbot-dns-google python3-certbot-dns-route53
+sudo apt-get install -y nginx certbot python3-certbot-dns-google python3-certbot-dns-route53 \
+  python3-certbot-dns-cloudflare
 sudo install -d -m 755 /etc/fl
-if [ "$FL_CLOUD" = gcp ]; then
+if [ "$FL_DNS_PROVIDER" = cloudflare ]; then
+  sudo install -m 600 "$HOME/fl-secrets/certbot-cloudflare.ini" /etc/fl/certbot-cloudflare.ini
+  FL_PLUGIN=(--dns-cloudflare --dns-cloudflare-credentials /etc/fl/certbot-cloudflare.ini \
+    --dns-cloudflare-propagation-seconds 60)
+elif [ "$FL_DNS_PROVIDER" = gcp ]; then
   sudo install -m 600 "$HOME/fl-secrets/certbot-google.json" /etc/fl/certbot-google.json
   FL_PLUGIN=(--dns-google --dns-google-credentials /etc/fl/certbot-google.json)
-else
+elif [ "$FL_DNS_PROVIDER" = aws ]; then
   FL_PLUGIN=(--dns-route53)
+else
+  printf 'Unknown FL_DNS_PROVIDER\n' >&2; exit 1
 fi
 if [ "$FL_ROLE" = scheduler ]; then
   FL_NAMES=("scheduler.$FL_DOMAIN" "headscale.$FL_DOMAIN" "agent.scheduler.$FL_DOMAIN")
@@ -919,8 +1038,9 @@ HOST
 done
 ```
 
-The unattended AWS renewal uses the EC2 instance role through IMDSv2; GCP renewal uses the
-protected DNS key. This example registers without an email; set an operational account email
+Unattended Cloudflare renewal uses the protected API token, Route 53 renewal uses the EC2
+instance role through IMDSv2, and Cloud DNS renewal uses the protected Google DNS key.
+This example registers without an email; set an operational account email
 with `--email` instead if desired. nginx must be running by the time the deploy hook is tested.
 
 The provider commands above also install the appropriate certificate plugin and unattended
@@ -980,7 +1100,7 @@ FL_ROLE=$1
 sudo apt-get update
 sudo apt-get install -y nginx openssh-server git curl jq python3 python3-venv \
   build-essential pkg-config libssl-dev zlib1g-dev libnsl-dev certbot \
-  python3-certbot-dns-google python3-certbot-dns-route53
+  python3-certbot-dns-google python3-certbot-dns-route53 python3-certbot-dns-cloudflare
 if [ "$FL_ROLE" = scheduler ]; then
   FL_VOLUME=${FL_AWS_SCHEDULER_VOLUME:-}; FL_DIRS=(postgresql headscale)
 else
@@ -1818,7 +1938,7 @@ or complete webhook URLs. Back up PostgreSQL, Headscale database/Noise key/confi
 the persistent encryption key, gateway host key/state and Mac SQLite/collateral using consistent
 database backups. Protect those backups as secret-bearing data.
 
-Rotate OAuth/service-account keys, Headscale API keys, cloud identities and provider secrets
+Rotate OAuth/service-account keys, Headscale API keys, cloud identities, Cloudflare DNS tokens and provider secrets
 through their own providers, updating protected files and restarting affected services. Preserve
 the enrollment encryption key unless deliberately handling outstanding receipts. Gateway host
 key changes require regenerated/pinned endpoint metadata; do not bypass host-key checking.
