@@ -1,9 +1,7 @@
-"""The sole file reader/writer behind BBCP's fixed program pipes."""
+"""Bounded stream helpers for gateway integrity and retention acceptance."""
 
-import argparse
 import hashlib
 import os
-import sys
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -72,33 +70,3 @@ def send(store: GatewayStore, transfer_id: UUID, kind: ArtifactKind, stream: Bin
                 store.source(grant)
                 stream.write(chunk)
         stream.flush()
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("direction", choices=("receive", "send"))
-    parser.add_argument("--root", type=Path, default=os.environ.get("FL_GATEWAY_ROOT"))
-    parser.add_argument("--bbcp", type=Path, default=os.environ.get("FL_GATEWAY_BBCP"))
-    parser.add_argument("--transfer", required=True, type=UUID)
-    parser.add_argument(
-        "--kind",
-        required=True,
-        choices=("binary", "bitstream", "stdout", "stderr", "results", "job"),
-    )
-    args = parser.parse_args()
-    if args.root is None or args.bbcp is None:
-        parser.error("Gateway stream requires protected server root and BBCP settings")
-    try:
-        store = GatewayStore(args.root, args.bbcp)
-        if args.direction == "receive":
-            receive(store, args.transfer, args.kind, sys.stdin.buffer)
-        else:
-            send(store, args.transfer, args.kind, sys.stdout.buffer)
-    except (PlatformError, OSError, ValueError) as error:
-        code = error.code if isinstance(error, PlatformError) else type(error).__name__
-        print(f"Gateway stream rejected ({code})", file=sys.stderr)
-        raise SystemExit(1) from error
-
-
-if __name__ == "__main__":
-    main()

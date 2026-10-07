@@ -1,4 +1,4 @@
-/* Linux fixture only: send native SSH/BBCP tailnet connections through tailscaled. */
+/* Linux fixture only: send native SSH/SFTP tailnet connections through tailscaled. */
 #define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <dlfcn.h>

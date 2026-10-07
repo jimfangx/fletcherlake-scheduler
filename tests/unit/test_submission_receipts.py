@@ -46,7 +46,7 @@ def test_replaced_private_identity_is_rejected_before_network_io(tmp_path):
         store.load()
 
 
-def test_resume_rejects_changed_source_before_bbcp_or_delivery(tmp_path):
+def test_resume_rejects_changed_source_before_rclone_or_delivery(tmp_path):
     source, store, receipt = prepare(tmp_path)
     source.write_bytes(b"replacement bytes")
     credentials = CredentialStore(tmp_path / "credentials" / "client.json")

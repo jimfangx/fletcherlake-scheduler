@@ -1,5 +1,6 @@
 """Mac inventory, detected tools, and optional one-way power-control scaffold."""
 
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Literal
 from uuid import UUID
@@ -23,8 +24,17 @@ class EnvironmentConfig(Schema):
     riscv_toolchain: ToolInfo | None = None
     gcc: ToolInfo | None = None
     clang: ToolInfo | None = None
-    bbcp: ToolInfo | None = None
+    rclone: ToolInfo | None = None
     chipyard: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def remove_legacy_transport(cls, value: object) -> object:
+        # Existing inventories remain readable during reconfiguration. A BBCP
+        # executable is never interpreted as rclone; its obsolete detection is discarded.
+        if isinstance(value, Mapping) and "bbcp" in value:
+            return {key: item for key, item in value.items() if key != "bbcp"}
+        return value
 
 
 class OSInfo(Schema):

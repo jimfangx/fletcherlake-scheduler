@@ -88,7 +88,7 @@ class TransferService:
             "TRANSFER_FAILED",
             "TRANSFER_EXPIRED",
             "TRANSFER_IO_FAILED",
-            "BBCP_MISSING",
+            "RCLONE_MISSING",
         }:
             await self.fail(work, work.fetch.error_code or "TRANSFER_FETCH_FAILED")
             return

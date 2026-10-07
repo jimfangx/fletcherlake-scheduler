@@ -1,4 +1,4 @@
-"""Mac-initiated, replayable export of immutable terminal collateral through BBCP."""
+"""Mac-initiated, replayable export of immutable terminal collateral through Rclone."""
 
 import asyncio
 import json
@@ -6,11 +6,11 @@ from pathlib import Path
 from uuid import UUID
 
 from fl_common.async_calls import background_call
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.files import atomic_write
 from fl_common.models.base import utcnow
 from fl_common.protocol.exports import ExportCommand, ExportReceipt, PublishCommand
+from fl_common.rclone import Rclone
 from fl_common.ssh import create_identity, identity_public_key
 
 from .collateral import CollateralStore
@@ -21,7 +21,7 @@ from .transfers import valid_file
 class AgentExports:
     def __init__(self, db: AgentDB, store: CollateralStore, executable: str | None = None) -> None:
         self.db, self.store, self.executable = db, store, executable
-        self.transport: BBCP | None = None
+        self.transport: Rclone | None = None
         self.tasks: dict[UUID, asyncio.Task[object]] = {}
         self.jobs: dict[UUID, UUID] = {}
         self.locks: dict[UUID, asyncio.Lock] = {}
@@ -92,7 +92,7 @@ class AgentExports:
                     raise PlatformError("TRANSFER_SCOPE", "Publication manifest changed")
                 if identity_public_key(identity) != command.grant.public_key:
                     raise PlatformError("TRANSFER_IDENTITY", "Publication key changed")
-                transport = self.transport or BBCP(self.executable)
+                transport = self.transport or Rclone(self.executable)
                 for ref in command.grant.files:
                     self.check(prepared)
                     source = self.store.path(command.job_id, ref.kind)

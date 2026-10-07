@@ -9,8 +9,8 @@
   "acls": [
     {"action": "accept", "proto": "tcp", "src": ["tag:cluster"], "dst": ["tag:scheduler:443", "tag:transfer-gateway:443", "tag:license-relay:2100,2101"]},
     {"action": "accept", "proto": "tcp", "src": ["tag:scheduler"], "dst": ["tag:cluster:443", "tag:transfer-gateway:443", "tag:power-controller:443"]},
-    {"action": "accept", "proto": "tcp", "src": ["tag:transfer-gateway"], "dst": ["tag:cluster:22,5000-5099", "tag:scheduler:443"]},
-    {"action": "accept", "proto": "tcp", "src": ["tag:cluster"], "dst": ["tag:transfer-gateway:22,5000-5099"]}
+    {"action": "accept", "proto": "tcp", "src": ["tag:transfer-gateway"], "dst": ["tag:scheduler:443"]},
+    {"action": "accept", "proto": "tcp", "src": ["tag:cluster"], "dst": ["tag:transfer-gateway:22"]}
   ],
   "ssh": []
 }

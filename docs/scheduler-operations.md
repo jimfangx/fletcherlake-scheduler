@@ -42,8 +42,8 @@ secret manager:
 | `FL_AGENT_ORIGIN` | Private HTTPS agent origin reachable through Headscale |
 | `FL_TRANSFER_GATEWAY_ORIGIN` | Private HTTPS gateway control origin |
 | `FL_TRANSFER_GATEWAY_CONTROL_SECRET` | Gateway's distinct scheduler control credential |
-| `FL_TRANSFER_PRIVATE_ENDPOINT_FILE` | Trusted JSON `TransferEndpoint` for the private BBCP listener and pinned host key |
-| `FL_TRANSFER_PUBLIC_ENDPOINT_FILE` | Trusted JSON `TransferEndpoint` for the public BBCP listener and pinned host key |
+| `FL_TRANSFER_PRIVATE_ENDPOINT_FILE` | Trusted JSON `TransferEndpoint` for the private rclone/SFTP listener and pinned host key |
+| `FL_TRANSFER_PUBLIC_ENDPOINT_FILE` | Trusted JSON `TransferEndpoint` for the public rclone/SFTP listener and pinned host key |
 | `FL_TRANSFER_PUBLIC_ORIGIN` | Public HTTPS gateway verification origin |
 | `FL_NOTIFICATION_CONFIG_FILE` | Optional protected, service-owned JSON with Mailgun/webhook configuration |
 | `FL_DASHBOARD_DIR` | Optional absolute path to the built dashboard `dist` directory |
@@ -133,7 +133,7 @@ Public and private endpoint files use the same schema:
 
 ```json
 {"host":"transfer.example.edu","port":22,"username":"fl-transfer",
- "host_key":"ssh-ed25519 BASE64_PUBLIC_HOST_KEY","data_port_first":5000,"data_port_last":5099}
+ "host_key":"ssh-ed25519 BASE64_PUBLIC_HOST_KEY"}
 ```
 
 Set the private file's host to the gateway's Headscale-reachable address. Replace the example key
@@ -145,7 +145,7 @@ See [the terminal workflow](remote-client.md#submit-and-resume) for submission a
 and artifact kinds. Identical requests reuse the read identity and an export of the same retained
 manifest. WAITING exposes no read credentials. The scheduler persists ARTIFACT_PREPARE; the Mac
 returns its protected export identity's public key. A private upload grant and ARTIFACT_PUBLISH
-then move files through BBCP. After the accepted ACK, private gateway sealing hashes every file
+then move files through rclone/SFTP. After the accepted ACK, private gateway sealing hashes every file
 before the export becomes READY. The resulting ticket grants public reads to the user's key.
 Transient publication errors retry with new command IDs, a ten-minute export deadline and ten
 attempts; terminal hardware state is unaffected by export failures. Worker replacement and lost

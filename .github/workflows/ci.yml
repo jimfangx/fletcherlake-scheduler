@@ -36,13 +36,13 @@ jobs:
           FL_TEST_HEADSCALE=$RUNNER_TEMP/fl-network/headscale
           FL_TEST_TAILSCALE_DIR=$RUNNER_TEMP/fl-network/tailscale_1.102.4_amd64
           EOF
-      - name: Build pinned BBCP acceptance tool
+      - name: Install pinned rclone acceptance tool
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make libssl-dev zlib1g-dev libnsl-dev openssh-server
-          pixi run python tests/build_bbcp.py --directory "$RUNNER_TEMP/fl-bbcp"
-          echo "FL_TEST_BBCP=$RUNNER_TEMP/fl-bbcp/bbcp" >> "$GITHUB_ENV"
+          sudo apt-get install -y openssh-server gcc
+          pixi run python tests/download_rclone.py --directory "$RUNNER_TEMP/fl-rclone"
+          echo "FL_TEST_RCLONE=$RUNNER_TEMP/fl-rclone/rclone" >> "$GITHUB_ENV"
       - name: Install native Linux deployment validators
         if: runner.os == 'Linux'
         run: |

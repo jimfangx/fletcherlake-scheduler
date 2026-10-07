@@ -29,7 +29,7 @@ def render_control(manifest: Deployment, templates: Path) -> dict[str, str]:
         {"name": host, "type": "A", "value": str(address)} for host, address in records
     ]
     policy = json.loads((templates / "headscale/policy.json").read_text())
-    replacements = {"5000-5099": f"{gateway.data_port_first}-{gateway.data_port_last}"}
+    replacements: dict[str, str] = {}
     if relay is None:
         policy["tagOwners"].pop("tag:license-relay", None)
     else:
@@ -38,7 +38,7 @@ def render_control(manifest: Deployment, templates: Path) -> dict[str, str]:
         )
     for rule in policy["acls"]:
         rule["dst"] = [
-            substitute(destination, replacements)
+            substitute(destination, replacements) if replacements else destination
             for destination in rule["dst"]
             if relay is not None or not destination.startswith("tag:license-relay:")
         ]
@@ -51,8 +51,6 @@ def render_control(manifest: Deployment, templates: Path) -> dict[str, str]:
         endpoint = TransferEndpoint(
             host=host,
             host_key=gateway.host_key,
-            data_port_first=gateway.data_port_first,
-            data_port_last=gateway.data_port_last,
         )
         result[f"gateway/{name}-endpoint.json"] = json_text(endpoint.model_dump(mode="json"))
     return result

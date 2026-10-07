@@ -78,7 +78,7 @@ class ExportService:
         if work.publish and work.publish.error_code not in {
             "TRANSFER_FAILED",
             "TRANSFER_IO_FAILED",
-            "BBCP_MISSING",
+            "RCLONE_MISSING",
         }:
             await self.close(work, work.publish.error_code or "EXPORT_PUBLICATION_FAILED")
             return

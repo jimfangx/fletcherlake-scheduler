@@ -1,4 +1,4 @@
-"""Mac-initiated BBCP pulls, bounded by a durable scope and local staging state."""
+"""Mac-initiated Rclone pulls, bounded by a durable scope and local staging state."""
 
 import asyncio
 import json
@@ -9,11 +9,11 @@ from pathlib import Path
 from uuid import UUID
 
 from fl_common.async_calls import background_call
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.files import atomic_write, fsync_directory, sha256_file
 from fl_common.models import JobRecord, JobState
 from fl_common.protocol.delivery import FetchCommand, StageReceipt
+from fl_common.rclone import Rclone
 from fl_common.ssh import create_identity, identity_public_key
 
 from .collateral import CollateralStore
@@ -26,7 +26,7 @@ class AgentTransfers:
         db: AgentDB,
         store: CollateralStore,
         is_ready: Callable[[], bool],
-        transport: BBCP | None = None,
+        transport: Rclone | None = None,
         executable: str | None = None,
     ) -> None:
         self.db, self.store, self.is_ready, self.transport = db, store, is_ready, transport
@@ -91,7 +91,7 @@ class AgentTransfers:
                     raise PlatformError(
                         "TRANSFER_IDENTITY", "Fetch does not use the staged identity"
                     )
-                transport = self.transport or BBCP(self.executable)
+                transport = self.transport or Rclone(self.executable)
                 for ref in command.grant.files:
                     self.check(command.job_id)
                     target = self.store.path(command.job_id, ref.kind)

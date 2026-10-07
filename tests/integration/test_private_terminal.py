@@ -11,8 +11,8 @@ from fl_client.credentials import Credentials, CredentialStore
 from fl_client.receipts import ReceiptStore
 from fl_client.results import Results
 from fl_client.submission import Submission
-from fl_common.bbcp import BBCP
 from fl_common.models import JobConfig
+from fl_common.rclone import Rclone
 from fl_gateway.api import create_app as gateway_app
 from fl_scheduler.artifacts.api import Downloads
 from fl_scheduler.artifacts.service import ExportService
@@ -83,9 +83,9 @@ async def test_terminal_submission_execution_and_results_over_private_peers(
 
         with RemoteClient(credentials, transport=httpx.MockTransport(handle)) as client:
             # Only public endpoints are visible to this terminal; no peer/proxy is
-            # attached to its native BBCP transport or human HTTP client.
-            transport = BBCP(str(network.binary))
-            workflow = Submission(client, bbcp=transport, display=lambda line: None)
+            # attached to its native Rclone transport or human HTTP client.
+            transport = Rclone(str(network.binary))
+            workflow = Submission(client, rclone=transport, display=lambda line: None)
             spec = await asyncio.wait_for(
                 asyncio.to_thread(
                     workflow.run,
@@ -96,7 +96,7 @@ async def test_terminal_submission_execution_and_results_over_private_peers(
             )
             await until(lambda: state(scheduler_db, spec.job_id) == "SUCCEEDED", seconds=30)
             destination = tmp_path / "returned results"
-            results = Results(client, bbcp=transport, display=lambda line: None)
+            results = Results(client, rclone=transport, display=lambda line: None)
             paths = await asyncio.wait_for(
                 asyncio.to_thread(
                     results.run,

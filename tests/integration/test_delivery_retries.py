@@ -3,9 +3,9 @@
 import asyncio
 
 import pytest
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.protocol import Ack, Message, MessageType
+from fl_common.rclone import Rclone
 from fl_scheduler.agents.commands import Commands
 from fl_scheduler.agents.reconcile import Reconciler
 from fl_scheduler.api.control import Control
@@ -17,16 +17,18 @@ from tests.connected import state, until
 from tests.integration.test_transfer_delivery import OWNER, delivery_state, setup_delivery
 
 
+@pytest.mark.parametrize("failure_code", ["TRANSFER_FAILED", "RCLONE_MISSING"])
 async def test_transient_fetch_failure_retries_with_new_message_and_same_scope(
     scheduler_db,
     connected_agents,
-    bbcp_gateway,
+    rclone_gateway,
     tmp_path,
+    failure_code,
 ):
     spec, upload, coordinator, client, target, _ = await setup_delivery(
-        scheduler_db, connected_agents, bbcp_gateway, tmp_path
+        scheduler_db, connected_agents, rclone_gateway, tmp_path
     )
-    real = BBCP(str(bbcp_gateway[2]))
+    real = Rclone(str(rclone_gateway[2]))
 
     class FailOnce:
         calls = 0
@@ -34,7 +36,7 @@ async def test_transient_fetch_failure_retries_with_new_message_and_same_scope(
         async def copy(self, *args):
             self.calls += 1
             if self.calls == 1:
-                raise PlatformError("TRANSFER_FAILED", "Injected transient payload connection loss")
+                raise PlatformError(failure_code, "Injected temporary transfer unavailability")
             await real.copy(*args)
 
     transport = FailOnce()
@@ -70,11 +72,11 @@ async def test_transient_fetch_failure_retries_with_new_message_and_same_scope(
 async def test_websocket_cancel_remains_responsive_during_blocked_payload(
     scheduler_db,
     connected_agents,
-    bbcp_gateway,
+    rclone_gateway,
     tmp_path,
 ):
     spec, upload, coordinator, client, target, _ = await setup_delivery(
-        scheduler_db, connected_agents, bbcp_gateway, tmp_path
+        scheduler_db, connected_agents, rclone_gateway, tmp_path
     )
     entered, stopped = asyncio.Event(), asyncio.Event()
 

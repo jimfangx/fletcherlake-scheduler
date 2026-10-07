@@ -36,7 +36,7 @@ def test_gateway_revocation_stops_an_existing_public_sender(tmp_path):
 
     data = b"payload bytes\n" * 200000
     source, _ = grant(tmp_path, data)
-    store = GatewayStore(tmp_path / "gateway", tmp_path / "bbcp")
+    store = GatewayStore(tmp_path / "gateway")
     store.register(source)
     receive(store, source.transfer_id, "binary", io.BytesIO(data))
     store.verify(source.transfer_id, TOKEN_HASH)
@@ -72,7 +72,7 @@ def test_private_mac_publication_can_only_be_sealed_through_control_api(tmp_path
 
     source, _ = grant(tmp_path, b"private publication")
     source.source_networks = ["127.0.0.1/32"]
-    store = GatewayStore(tmp_path / "gateway", tmp_path / "bbcp")
+    store = GatewayStore(tmp_path / "gateway")
     store.register(source)
     receive(store, source.transfer_id, "binary", io.BytesIO(b"private publication"))
     control = "separate scheduler control credential for sealing"

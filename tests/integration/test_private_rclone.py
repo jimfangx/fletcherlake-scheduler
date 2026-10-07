@@ -1,4 +1,4 @@
-"""Public BBCP upload, private encrypted fetch, source fencing and actual mock execution."""
+"""Public Rclone upload, private encrypted fetch, source fencing and actual mock execution."""
 
 import asyncio
 import hashlib
@@ -6,12 +6,12 @@ from datetime import timedelta
 
 import pytest
 from fl_agent.commands import CommandHandler
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.models import ArtifactRef, JobConfig, JobSpec
 from fl_common.models.base import utcnow
 from fl_common.protocol import Message, MessageType
 from fl_common.protocol.delivery import FetchCommand, StageReceipt
+from fl_common.rclone import Rclone
 from fl_gateway.store import GatewayStore
 
 from tests.network_sockets import SocketAdapters
@@ -24,13 +24,12 @@ from tests.transfer import TOKEN_HASH, grant
     "tailscale_peers", [False, True], indirect=True, ids=["normal", "derp-only"]
 )
 async def test_public_upload_private_fetch_and_source_fence(
-    headscale_server, tailscale_peers, bbcp_gateway, service_factory, tmp_path
+    headscale_server, tailscale_peers, rclone_gateway, service_factory, tmp_path
 ):
     coordinator, api_key = headscale_server
-    store, public, binary = bbcp_gateway
+    store, public, binary = rclone_gateway
     adapters = SocketAdapters(tmp_path)
-    store = GatewayStore(store.root, binary, data_port_last=5007)
-    public = public.model_copy(update={"data_port_last": 5007})
+    store = GatewayStore(store.root)
     peers, addresses = enrolled(
         coordinator,
         api_key,
@@ -49,8 +48,6 @@ async def test_public_upload_private_fetch_and_source_fence(
         gateway.command(
             "serve", "--bg", "--tcp=22", "--proxy-protocol=1", f"tcp://127.0.0.1:{port}"
         )
-        for data_port in range(5000, 5008):
-            gateway.command("serve", "--bg", f"--tcp={data_port}", f"tcp://127.0.0.1:{data_port}")
         endpoint = public.model_copy(update={"host": gateway_ip, "port": 22})
         ready_ssh(gateway_ip, [cluster, other])
         data = b"encrypted private ELF payload\n" * 16384
@@ -75,8 +72,8 @@ async def test_public_upload_private_fetch_and_source_fence(
         for kind, payload in (("binary", data), ("bitstream", bit_data)):
             path = tmp_path / f"public {kind}"
             path.write_bytes(payload)
-            # This client uses ordinary public SSH/BBCP and no Headscale proxy.
-            await BBCP(str(binary)).copy(path, public, upload, kind, identity)
+            # This client uses ordinary public SSH/Rclone and no Headscale proxy.
+            await Rclone(str(binary)).copy(path, public, upload, kind, identity)
         assert store.verify(upload.transfer_id, TOKEN_HASH) == upload.files
         service = service_factory()
         await service.start()
@@ -99,7 +96,7 @@ async def test_public_upload_private_fetch_and_source_fence(
         store.register(download)
         agent_identity = service.transfers.identity(spec.job_id, download.transfer_id)
         trace = tmp_path / "cluster-connect.log"
-        service.transfers.transport = BBCP(str(binary), runner=adapters.runner(cluster, trace))
+        service.transfers.transport = Rclone(str(binary), runner=adapters.runner(cluster, trace))
         fetched = await handler.handle(
             Message(
                 type=MessageType.JOB_FETCH,
@@ -115,19 +112,20 @@ async def test_public_upload_private_fetch_and_source_fence(
             assert service.store.path(spec.job_id, kind).read_bytes() == payload
         assert cluster_ip in sources
         connections = [line.split() for line in trace.read_text().splitlines()]
-        assert sum(int(port) == 22 for _, port in connections) == 2
-        assert sum(5000 <= int(port) < 5008 for _, port in connections) >= 8
+        assert sum(int(port) == 22 for _, port in connections) >= 2
+        assert all(int(port) == 22 for _, port in connections)
         assert all(host == gateway_ip for host, _ in connections)
         cluster.assert_relay(gateway_ip)
         # The same correct key is denied from another permitted cluster by its /32.
         previous_connections = sources.count(other_ip)
         with pytest.raises(PlatformError) as error:
-            await BBCP(str(binary), runner=adapters.runner(other, tmp_path / "other.log")).copy(
+            await Rclone(str(binary), runner=adapters.runner(other, tmp_path / "other.log")).copy(
                 tmp_path / "unauthorized", endpoint, download, "binary", agent_identity
             )
         assert error.value.code == "TRANSFER_FAILED"
         assert sources.count(other_ip) > previous_connections
-        assert "Permission denied (publickey)" in (tmp_path / "other.error").read_text()
+        # rclone does not forward external SSH stderr; inspect native server denial.
+        assert "Refused by key options" in (tmp_path / "private-sshd.log").read_text()
         assert not (tmp_path / "unauthorized").exists()
         assert (
             await handler.handle(

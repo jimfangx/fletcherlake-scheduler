@@ -1,15 +1,15 @@
-"""Real BBCP + HTTP control + PostgreSQL + WebSocket delivery gates physical execution."""
+"""Real Rclone + HTTP control + PostgreSQL + WebSocket delivery gates physical execution."""
 
 import asyncio
 from datetime import timedelta
 
 import httpx
 import pytest
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.models import JobConfig, ResourceConstraints
 from fl_common.models.base import utcnow
 from fl_common.models.scheduler import Principal, Role
+from fl_common.rclone import Rclone
 from fl_gateway.api import create_app
 from fl_scheduler.agents.commands import Commands
 from fl_scheduler.api.control import Control
@@ -34,9 +34,9 @@ def delivery_state(db, job_id):
         return row.state if row else None
 
 
-async def setup_delivery(scheduler_db, connected_agents, bbcp_gateway, tmp_path):
+async def setup_delivery(scheduler_db, connected_agents, rclone_gateway, tmp_path):
     _, agents = connected_agents
-    store, endpoint, binary = bbcp_gateway
+    store, endpoint, binary = rclone_gateway
     data = b"actual remote collateral payload\n" * 8192
     upload, identity = grant(tmp_path, data)
     placement = Placement(scheduler_db)
@@ -52,9 +52,9 @@ async def setup_delivery(scheduler_db, connected_agents, bbcp_gateway, tmp_path)
     store.register(upload)
     source = tmp_path / "user payload.elf"
     source.write_bytes(data)
-    await BBCP(str(binary)).copy(source, endpoint, upload, "binary", identity)
+    await Rclone(str(binary)).copy(source, endpoint, upload, "binary", identity)
     store.verify(upload.transfer_id, TOKEN_HASH)
-    target.transfers.transport = BBCP(str(binary))
+    target.transfers.transport = Rclone(str(binary))
     client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=create_app(store, CONTROL)),
         base_url="https://gateway.test",
@@ -71,11 +71,11 @@ async def setup_delivery(scheduler_db, connected_agents, bbcp_gateway, tmp_path)
 async def test_verified_delivery_resumes_after_scheduler_worker_restart(
     scheduler_db,
     connected_agents,
-    bbcp_gateway,
+    rclone_gateway,
     tmp_path,
 ):
     spec, upload, coordinator, client, target, store = await setup_delivery(
-        scheduler_db, connected_agents, bbcp_gateway, tmp_path
+        scheduler_db, connected_agents, rclone_gateway, tmp_path
     )
     try:
         transfer_id = await coordinator.begin(spec.job_id, upload.transfer_id, OWNER)
@@ -121,11 +121,11 @@ async def test_verified_delivery_resumes_after_scheduler_worker_restart(
 async def test_cancel_after_staging_prevents_fetch_and_enqueue(
     scheduler_db,
     connected_agents,
-    bbcp_gateway,
+    rclone_gateway,
     tmp_path,
 ):
     spec, upload, coordinator, client, target, store = await setup_delivery(
-        scheduler_db, connected_agents, bbcp_gateway, tmp_path
+        scheduler_db, connected_agents, rclone_gateway, tmp_path
     )
     try:
         transfer_id = await coordinator.begin(spec.job_id, upload.transfer_id, OWNER)
@@ -150,11 +150,11 @@ async def test_cancel_after_staging_prevents_fetch_and_enqueue(
 async def test_delivery_authorizes_owner_before_gateway_probe(
     scheduler_db,
     connected_agents,
-    bbcp_gateway,
+    rclone_gateway,
     tmp_path,
 ):
     spec, upload, coordinator, client, _, _ = await setup_delivery(
-        scheduler_db, connected_agents, bbcp_gateway, tmp_path
+        scheduler_db, connected_agents, rclone_gateway, tmp_path
     )
     try:
         bob = Principal(email="bob@berkeley.edu", subject="bob", role=Role.USER)

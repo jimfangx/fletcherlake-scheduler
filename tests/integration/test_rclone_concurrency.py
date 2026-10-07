@@ -3,21 +3,16 @@
 import asyncio
 import hashlib
 
-import pytest
-from fl_common.bbcp import BBCP
 from fl_common.models import ArtifactRef
+from fl_common.rclone import Rclone
 from fl_gateway.store import GatewayStore
 
 from tests.transfer import TOKEN_HASH, grant
 
 
-@pytest.mark.parametrize("data_port_last", [5007, 5099], ids=["eight-ports", "default-range"])
-async def test_concurrent_public_uploads_keep_manifests_separate(
-    bbcp_gateway, tmp_path, data_port_last
-):
-    original, endpoint, binary = bbcp_gateway
-    store = GatewayStore(original.root, binary, data_port_last=data_port_last)
-    endpoint = endpoint.model_copy(update={"data_port_last": data_port_last})
+async def test_concurrent_public_uploads_keep_manifests_separate(rclone_gateway, tmp_path):
+    original, endpoint, binary = rclone_gateway
+    store = GatewayStore(original.root)
     uploads = []
     for index in range(8):
         elf = f"public ELF for job {index}\n".encode() * 16384
@@ -40,7 +35,7 @@ async def test_concurrent_public_uploads_keep_manifests_separate(
 
     async def upload(scope, identity, files):
         for kind, path in files:
-            await BBCP(str(binary)).copy(path, endpoint, scope, kind, identity)
+            await Rclone(str(binary)).copy(path, endpoint, scope, kind, identity)
 
     # Cancel and reap every sibling's native process group if any transfer fails.
     async with asyncio.TaskGroup() as tasks:

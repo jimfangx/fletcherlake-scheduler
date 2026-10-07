@@ -1,5 +1,16 @@
 # Implementation audit
 
+The requested transport update supersedes BBCP in the original requirements. Current code
+uses rclone/SFTP for all four artifact hops. The earlier BBCP run and timeout observations
+below are historical evidence. Current tests are `test_rclone_transfer.py`,
+`test_rclone_concurrency.py`, `test_private_rclone.py`, `test_scoped_sftp.py` and
+`test_rclone_transport.py`; terminal/integrity/revocation tests now use the same rclone path.
+The migration run passes 417 full-suite tests (one optional long-partition skip), with
+additional focused tests for final SSH settings and missing-tool retries. See
+[gateway operations and rollout](transfer-gateway.md) and the latest verification entry in
+[the ledger](implementation-status.md).
+
+
 The requested software implementation of `context/INST_Agent.md` is complete. This is an
 implementation and Linux acceptance result, not a production deployment claim. The plan
 explicitly excludes PCB firmware and requires only a Kasa scaffold; the user also allows
@@ -77,17 +88,17 @@ requirements outside the milestone headings.
 | 28 Twelve-step submission | Client receipts/submission, scheduler upload/delivery workers, gateway grants, Mac fetch/verify/enqueue | `test_terminal_submission.py`, `test_private_terminal.py`, `test_transfer_delivery.py`: bitstream+ELF, independent SHA checks, durable ACK before enqueue and lost-response resume without duplicate execution |
 | 29 Terminal authentication | `fl_client.auth`/`session`; scheduler login/sessions | `test_authentication.py`, `test_submission_login.py`: URL/code approval, missing/expired session login, rotating/revocable protected credentials |
 | 30 Groups/roles | Google verifier, group-owned Cloud Identity or delegated Directory adapter, bounded membership cache and owner/role checks | `test_cloud_identity_groups.py`, `test_google_verification.py`, `test_authentication.py`, `test_public_api.py`: non-member denial, direct membership/expiry, service-account signing without impersonation, issuer/audience/nonce validation and provider-outage denial; external providers intercepted/injected |
-| 31–32 Private network/nodes | Headscale config/policy, adapter and deployment renderer; cluster-specific tags | `test_private_network.py`, `test_private_bbcp.py`: real peers, cluster isolation, bounded ports, verified relay clients and source-fenced SSH, under normal and forced DERP paths |
+| 31–32 Private network/nodes | Headscale config/policy, adapter and deployment renderer; cluster-specific tags | `test_private_network.py`, `test_private_rclone.py`: real peers, cluster isolation, bounded ports, verified relay clients and source-fenced SSH, under normal and forced DERP paths |
 | 33 Enrollment | Admin tickets, scoped pre-auth keys, registration verification, encrypted replay receipts and revocation worker | `test_enrollment.py`, `test_headscale_adapter.py`, `test_macos_enrollment.py`, `test_retirement_retries.py`: role boundaries, enrollment races, lost replies and durable cleanup |
 | 34 License relay (optional per user correction) | Opt-in `license_relay` mapping; dedicated tag, fixed-port HAProxy and matching ACL/private DNS; omitted/null emits no relay files, license DNS or ACL/tag | `test_deployment_native.py`, `test_deployment_relay.py`: native parser and real two-port forwarding with denied interfaces/ports; actual BWRC checkout/release remains untested when enabled |
 | 35 Local status/TUI | `fl_cli.dashboard`, inventory editor and SDK snapshots | `test_dashboard.py`, `test_dashboard_views.py`, `test_inventory_editor.py`: tables, metrics, details, selection, stale reads and 80×24 interaction |
 | 36 Scheduler UI | React cluster/board/job and admin enrollment/user routes; same-origin scheduler API | Six frontend tests; `test_scheduler_dashboard.py` with Chromium/PostgreSQL/HTTPS: all seven routes/reloads, owner/admin denial, polling, logout, enrollment secrecy and desktop/mobile layouts |
 | 37 Notifications | Durable event projection/delivery, Mailgun/Slack/Google Chat adapters and warning events | `test_notification_projection.py`, `test_notification_delivery.py`, `test_notification_alerts.py`, `test_notification_admin.py`: provider envelopes/ACKs, fencing/retry, once-per-event fanout and bounded expiry warnings; no external messages sent |
-| 38 Security | Strict YAML models, protected secret files, cookie/session roles, fixed artifact paths, scoped SSH/BBCP and public/private proxy routes | Models/auth/public API/gateway scopes/transfer tests plus native nginx and browser acceptance: independent SHA, role/owner denial, replay/revocation, CSP/origin and route boundaries |
+| 38 Security | Strict YAML models, protected secret files, cookie/session roles, fixed artifact paths, scoped SSH/rclone/SFTP and public/private proxy routes | Models/auth/public API/gateway scopes/transfer tests plus native nginx and browser acceptance: independent SHA, role/owner denial, replay/revocation, CSP/origin and route boundaries |
 | 39 Testing strategy | Unit, mock hardware, three-agent/nine-board integration, SIGKILL and real TCP partition fixtures | Current full run; separate 10/60/600-second run; scheduler fresh-process and management/deletion/retirement crash tests |
 | 40 Milestones | All fifteen software milestones mapped in the requirement ledger | Evidence above and ledger; physical firmware and actual smart-plug control are outside the initial software scope |
 | 41 Architecture rules | SDK/API separation; local worker authority; ephemeral cache/durable queue; public client stays outside Headscale | Terminal/private transport, crash/partition/restart, scope/owner tests and browser request-origin checks; scheduler does not dispatch hardware through SSH |
-| 42 MVP | Terminal client → authenticated placement/reservation → native BBCP → Mac verification → mock hardware → logs/results | `test_terminal_submission.py`, `test_private_terminal.py`: complete workflow with user host outside private network, including resumes and retained inputs/results |
+| 42 MVP | Terminal client → authenticated placement/reservation → native rclone/SFTP → Mac verification → mock hardware → logs/results | `test_terminal_submission.py`, `test_private_terminal.py`: complete workflow with user host outside private network, including resumes and retained inputs/results |
 | 43 Final system | Separate scheduler, agent, client, gateway, Headscale and license-relay components, documented deployment bundles | Combined native-network acceptance and deployment parser/runtime tests; production installation is not performed here |
 
 Tests named without a prefix are in `tests/integration` or `tests/unit`; deployment tests are
@@ -99,7 +110,7 @@ These are environment-dependent checks, not implementations silently omitted fro
 
 1. On an actual Mac, install the locked environment and validate launchd registration/recovery,
    protected Unix sockets, native Tailscale DNS/TUN/TLS, sleep/wake and reboot behavior, Darwin
-   BBCP, and the local terminal UI. Follow [Mac operations](macos-operations.md).
+   rclone/OpenSSH, and the local terminal UI. Follow [Mac operations](macos-operations.md).
 2. Supply the actual firmware operation mappings and validate board power/program/run/stop,
    UART, sensor and shmoo behavior. The configurable `LilikoiBoardBackend` is implemented;
    the separately supplied firmware is not fabricated.
@@ -113,7 +124,8 @@ These are environment-dependent checks, not implementations silently omitted fro
    entitlement. Verify checkout/release, relay restart and denied unrelated BWRC access as
    described in [license relay operations](license-relay.md). No broad subnet access is added.
 
-An intermittent public BBCP upload timeout remains unexplained. It occurred in earlier repeated
+A historical intermittent public BBCP upload timeout remains unexplained. That transport
+has been replaced by rclone/SFTP; the observations below predate the migration. It occurred in earlier repeated
 acceptance; subsequent repetitions and the current full suite pass. A distinct, reproduced
 concurrent receiver bind failure was fixed with bounded per-port OS locks and verified with
 eight independent clients under both narrow and default ranges. That fix is not evidence that

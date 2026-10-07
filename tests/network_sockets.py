@@ -1,4 +1,4 @@
-"""Linux-only socket adapters for real userspace WireGuard + native SSH/BBCP tests."""
+"""Linux-only socket adapters for real userspace WireGuard + native SSH/Rclone tests."""
 
 import os
 import platform

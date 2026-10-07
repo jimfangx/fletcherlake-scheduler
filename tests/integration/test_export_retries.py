@@ -4,9 +4,9 @@ import asyncio
 from datetime import timedelta
 
 import pytest
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.models.base import utcnow
+from fl_common.rclone import Rclone
 from fl_scheduler.api.control import Control
 from fl_scheduler.artifacts.models import Export
 from fl_scheduler.artifacts.service import ExportService
@@ -17,9 +17,12 @@ from tests.connected import state, until
 from tests.integration.test_artifact_downloads import OWNER
 
 
-async def test_export_retry_after_worker_replacement_reuses_scope_and_verifies_bytes(export_stack):
+@pytest.mark.parametrize("failure_code", ["TRANSFER_FAILED", "RCLONE_MISSING"])
+async def test_export_retry_after_worker_replacement_reuses_scope_and_verifies_bytes(
+    export_stack, failure_code
+):
     stack = export_stack
-    real = BBCP(str(stack.binary))
+    real = Rclone(str(stack.binary))
 
     class FailOnce:
         calls = 0
@@ -27,7 +30,7 @@ async def test_export_retry_after_worker_replacement_reuses_scope_and_verifies_b
         async def copy(self, *args):
             self.calls += 1
             if self.calls == 1:
-                raise PlatformError("TRANSFER_FAILED", "Injected first upload disconnect")
+                raise PlatformError(failure_code, "Injected temporary publication unavailability")
             await real.copy(*args)
 
     transport = FailOnce()
@@ -35,7 +38,7 @@ async def test_export_retry_after_worker_replacement_reuses_scope_and_verifies_b
     await stack.service.advance(stack.export_id)
     await until(lambda: stack.service.state.work(stack.export_id).publish is not None)
     first = stack.service.state.work(stack.export_id).publish
-    assert not first.accepted and first.error_code == "TRANSFER_FAILED"
+    assert not first.accepted and first.error_code == failure_code
     with stack.db.transaction() as session:
         session.get(Export, stack.export_id).next_attempt_at = utcnow() - timedelta(seconds=1)
     replacement = ExportService(

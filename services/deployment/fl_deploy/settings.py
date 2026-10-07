@@ -31,10 +31,7 @@ def render_settings(manifest: Deployment) -> dict[str, str]:
                 "FL_BIND_HOST": "127.0.0.1",
                 "FL_BIND_PORT": "8081",
                 "FL_GATEWAY_ROOT": "/var/lib/fl-transfer",
-                "FL_GATEWAY_BBCP": manifest.bbcp_binary,
                 "FL_GATEWAY_CONTROL_SECRET_FILE": "/var/lib/fl-transfer/control-secret",
-                "FL_GATEWAY_DATA_PORT_FIRST": str(gateway.data_port_first),
-                "FL_GATEWAY_DATA_PORT_LAST": str(gateway.data_port_last),
             }
         ),
     }

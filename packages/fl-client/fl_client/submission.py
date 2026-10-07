@@ -1,16 +1,16 @@
-"""Ordinary-user submission: public HTTPS metadata and BBCP, with durable local retry proof."""
+"""Ordinary-user submission: public HTTPS metadata and Rclone, with durable local retry proof."""
 
 import asyncio
 import time
 from collections.abc import Callable
 from pathlib import Path
 
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.files import sha256_file
 from fl_common.models import ArtifactRef, JobConfig, JobSpec
 from fl_common.models.scheduler import Principal
 from fl_common.models.submission import SubmissionResponse, UploadTicket
+from fl_common.rclone import Rclone
 from pydantic import TypeAdapter
 
 from .api import RemoteClient, checked
@@ -22,11 +22,11 @@ class Submission:
         self,
         client: RemoteClient,
         *,
-        bbcp: BBCP | None = None,
+        rclone: Rclone | None = None,
         display: Callable[[str], None] = print,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        self.client, self.bbcp, self.display, self.sleep = client, bbcp, display, sleep
+        self.client, self.rclone, self.display, self.sleep = client, rclone, display, sleep
 
     def run(self, store: ReceiptStore, config: JobConfig | None = None) -> JobSpec:
         with store.lock():
@@ -106,7 +106,7 @@ class Submission:
                             "ARTIFACT_CHANGED",
                             "Input changed after receipt creation; submit a new request",
                         )
-                transport = self.bbcp or BBCP()
+                transport = self.rclone or Rclone()
                 for ref in refs:
                     source = Path(str(getattr(receipt.request.config, ref.kind)))
                     self.display("Uploading " + ref.kind)

@@ -4,10 +4,10 @@ import asyncio
 import io
 
 from fl_agent.commands import CommandHandler
-from fl_common.bbcp import BBCP
 from fl_common.models import JobConfig, JobSpec
 from fl_common.protocol import Message, MessageType
 from fl_common.protocol.delivery import FetchCommand, StageReceipt
+from fl_common.rclone import Rclone
 from fl_gateway.stream import receive
 
 from tests.transfer import TOKEN_HASH, grant
@@ -33,9 +33,9 @@ async def staged(service, spec, transfer_id):
     return handler, StageReceipt.model_validate(ack.result)
 
 
-async def test_real_gateway_to_agent_to_hardware(bbcp_gateway, service_factory, tmp_path):
-    store, endpoint, binary = bbcp_gateway
-    data = b"real BBCP agent collateral" * 8192
+async def test_real_gateway_to_agent_to_hardware(rclone_gateway, service_factory, tmp_path):
+    store, endpoint, binary = rclone_gateway
+    data = b"real Rclone agent collateral" * 8192
     upload, _ = grant(tmp_path, data)
     spec = JobSpec.from_config(
         JobConfig(binary="input.elf"), "alice@berkeley.edu", binary=upload.files[0]
@@ -50,7 +50,7 @@ async def test_real_gateway_to_agent_to_hardware(bbcp_gateway, service_factory, 
     handler, receipt = await staged(service, spec, download.transfer_id)
     download.public_key = receipt.public_key
     store.register(download)
-    service.transfers.transport = BBCP(str(binary))
+    service.transfers.transport = Rclone(str(binary))
     fetch = Message(
         type=MessageType.JOB_FETCH,
         payload=FetchCommand(

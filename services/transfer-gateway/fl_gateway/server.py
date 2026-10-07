@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -38,15 +37,7 @@ def application() -> FastAPI:
     if credential.is_symlink() or info.st_mode & 0o077 or info.st_uid != os.geteuid():
         raise PermissionError("Gateway control credential requires this user's mode-0600 file")
     secret = SecretStr(credential.read_text().strip())
-    executable = os.environ.get("FL_GATEWAY_BBCP") or shutil.which("bbcp")
-    if not executable:
-        raise RuntimeError("Install BBCP and configure FL_GATEWAY_BBCP")
-    store = GatewayStore(
-        Path(os.environ["FL_GATEWAY_ROOT"]),
-        Path(executable),
-        data_port_first=int(os.environ.get("FL_GATEWAY_DATA_PORT_FIRST", "5000")),
-        data_port_last=int(os.environ.get("FL_GATEWAY_DATA_PORT_LAST", "5099")),
-    )
+    store = GatewayStore(Path(os.environ["FL_GATEWAY_ROOT"]))
     sweep(store)
 
     @asynccontextmanager

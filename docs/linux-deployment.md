@@ -53,7 +53,7 @@ Google/Directory, database, Headscale, enrollment and gateway credentials. Follo
 gateway's protected credential file. Keep keys out of this manifest and out of cluster/job YAML.
 Build the dashboard before enabling its rendered `FL_DASHBOARD_DIR`.
 
-The renderer updates the gateway endpoint metadata, data-port ACLs and gateway environment
+The renderer updates the gateway endpoint metadata, SSH-only ACLs and gateway environment
 defaults together. When enabled, it also updates license frontends, backends, ACL ports and private DNS together,
 including swapped manager/vendor ports. Preserve the fixed port pair. Both gateway endpoints
 pin the same supplied SSH host key; never accept an unknown key automatically.
@@ -64,7 +64,7 @@ described in the role guides. Apply PostgreSQL migrations before starting the sc
 the dedicated transfer SSH daemon separately from administrative SSH, with nonconflicting
 explicit address bindings. Configure public DNS and host/cloud firewalls separately; configure
 BWRC egress only when the license relay is enabled.
-Public transfer SSH/BBCP ports are the scoped data-plane exception to public HTTPS-only control.
+Public transfer SSH/SFTP on TCP 22 is the scoped data-plane exception to public HTTPS-only control.
 
 Validate on each deployment host before loading files:
 

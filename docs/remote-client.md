@@ -45,7 +45,7 @@ saved after a successful one-use refresh, log in again.
 
 ## Submit and resume
 
-Install BBCP and OpenSSH on the user host. The command resolves YAML input paths relative to
+Install rclone and OpenSSH on the user host. The command resolves YAML input paths relative to
 the YAML file, hashes each input, and saves a protected receipt before sending job metadata.
 The receipt contains the immutable request ID, authenticated owner, per-job SSH identity binding,
 and staging token.
@@ -67,7 +67,7 @@ outages are reported without starting repeated approval attempts.
 
 The scheduler assigns the trusted owner and job UUID. The client waits for a board reservation
 before obtaining an upload grant. It transfers bytes directly to the public gateway through
-BBCP with a pinned SSH host key, verifies the complete manifest through the gateway's HTTPS
+rclone/SFTP with a pinned SSH host key, verifies the complete manifest through the gateway's HTTPS
 API, then requests delivery from the scheduler. The Mac initiates the private download and
 verifies bytes before execution. The terminal command returns after delivery is accepted;
 use `status` to monitor execution. `--follow` displays durable state transitions through the
@@ -85,7 +85,7 @@ monitor or cancel the known UUID instead of guessing whether a new submission du
 
 The scheduler stores only the staging-token hash and public identity. Human session credentials
 go only to the scheduler; verification sends the separate staging token to the gateway. Both
-HTTPS paths reject redirects. BBCP's public payload sockets are unencrypted; see
+HTTPS paths reject redirects. All payload bytes use encrypted SFTP over pinned SSH; see
 [the transport boundary](transfer-gateway.md#protocol-and-scope).
 
 Python callers can use `Submission(RemoteClient(...)).run(ReceiptStore(path), config)` and
@@ -105,10 +105,10 @@ are omitted when absent. Only the job owner or an authorized operator/admin can 
 The default directory is `results-JOB_UUID` under the current working directory.
 
 The scheduler requests an exact immutable manifest from the assigned Mac. The Mac creates a
-protected export identity and uploads through the private BBCP listener. The scheduler hashes
+protected export identity and uploads through the private rclone/SFTP listener. The scheduler hashes
 and seals those bytes on the gateway before issuing a public read grant bound to the user's
 separate SSH key. The user initiates the public download and independently checks SHA and size.
-These artifact downloads use BBCP. User hosts need no root or Headscale membership;
+These artifact downloads use rclone/SFTP. User hosts need no root or Headscale membership;
 Macs need no incoming SSH listener. Credentials expire within ten minutes and cannot exceed
 artifact retention. Exported copies retain the same completion-based expiry as their agent source.
 

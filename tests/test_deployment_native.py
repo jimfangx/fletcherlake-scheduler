@@ -72,7 +72,7 @@ def test_rendered_files_pass_all_native_parsers(tmp_path, license_relay):
     effective = run(sshd, "-T", "-f", str(config))
     for setting in ("disableforwarding yes", "permittty no", "authenticationmethods publickey"):
         assert setting in effective
-    assert "subsystem " not in effective
+    assert "subsystem sftp internal-sftp" in effective
     coordinator = yaml.safe_load((bundle / "scheduler/headscale.yaml").read_text())
     coordinator["unix_socket"] = str(tmp_path / "headscale.sock")
     coordinator["noise"]["private_key_path"] = str(tmp_path / "noise.key")

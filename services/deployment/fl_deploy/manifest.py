@@ -81,14 +81,6 @@ class Gateway(Schema):
     hostname: Host
     private_hostname: Host
     host_key: Annotated[str, AfterValidator(public_key)]
-    data_port_first: int = Field(default=5000, ge=1024, le=65535)
-    data_port_last: int = Field(default=5099, ge=1024, le=65535)
-
-    @model_validator(mode="after")
-    def data_range(self) -> Self:
-        if self.data_port_last < self.data_port_first + 7:
-            raise ValueError("BBCP needs at least eight data ports")
-        return self
 
 
 class LicenseRelay(Schema):
@@ -112,7 +104,6 @@ class Deployment(Schema):
     install_root: LinuxPath = "/opt/fl"
     certificate_root: LinuxPath = "/etc/letsencrypt/live"
     headscale_binary: LinuxPath = "/usr/local/bin/headscale"
-    bbcp_binary: LinuxPath = "/opt/fl-tools/bbcp"
 
     @model_validator(mode="after")
     def distinct_hosts(self) -> Self:

@@ -90,7 +90,7 @@ def test_public_download_verifies_bytes_and_never_clobbers_different_files(tmp_p
 
     transport = Transport()
     with RemoteClient(credentials, transport=httpx.MockTransport(handle)) as client:
-        workflow = Results(client, bbcp=transport, display=lambda _: None)
+        workflow = Results(client, rclone=transport, display=lambda _: None)
         if mode in {"success_resume", "lost_response"}:
             if mode == "lost_response":
                 with pytest.raises(httpx.ReadError):

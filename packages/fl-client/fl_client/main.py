@@ -33,7 +33,7 @@ def results(
     credentials: Path | None = None,
     scheduler: str | None = None,
 ) -> None:
-    """Download terminal outputs through BBCP; repeating the same output directory resumes."""
+    """Download terminal outputs through Rclone; repeating the same output directory resumes."""
     with errors(), RemoteClient(CredentialStore(credentials)) as client:
         ensure_login(client, scheduler, typer.echo)
         for path in Results(client, display=typer.echo).run(

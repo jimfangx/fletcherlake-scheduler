@@ -11,12 +11,12 @@ from tests.integration.test_transfer_delivery import OWNER, setup_delivery
 async def test_public_delivery_requires_owner_and_replays_same_scope(
     scheduler_db,
     connected_agents,
-    bbcp_gateway,
+    rclone_gateway,
     auth_stack,
     tmp_path,
 ):
     spec, upload, coordinator, gateway_client, _, _ = await setup_delivery(
-        scheduler_db, connected_agents, bbcp_gateway, tmp_path
+        scheduler_db, connected_agents, rclone_gateway, tmp_path
     )
     sessions, login, directory, _, _ = auth_stack
     directory.members["users"].update({OWNER.email, "bob@example.edu"})

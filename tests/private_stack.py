@@ -1,4 +1,4 @@
-"""Actual private HTTPS/WSS and BBCP infrastructure around one simulated Mac."""
+"""Actual private HTTPS/WSS and Rclone infrastructure around one simulated Mac."""
 
 import asyncio
 import ssl
@@ -13,7 +13,7 @@ import pytest
 from fl_agent.configuration import confirm_config, write_config
 from fl_agent.connection import SchedulerConnection
 from fl_agent.service import AgentService
-from fl_common.bbcp import BBCP
+from fl_common.rclone import Rclone
 from fl_gateway.api import create_app
 from fl_gateway.store import GatewayStore
 from fl_scheduler.db.models import Cluster
@@ -50,12 +50,11 @@ def ready_https(peer, url, context):
 
 @pytest.fixture
 async def private_stack(
-    scheduler_db, config, headscale_server, tailscale_peers, bbcp_gateway, tmp_path, monkeypatch
+    scheduler_db, config, headscale_server, tailscale_peers, rclone_gateway, tmp_path, monkeypatch
 ):
     coordinator, api_key = headscale_server
-    original, public, binary = bbcp_gateway
-    store = GatewayStore(original.root, binary, data_port_last=5007)
-    public = public.model_copy(update={"data_port_last": 5007})
+    original, public, binary = rclone_gateway
+    store = GatewayStore(original.root)
     peers, addresses = enrolled(
         coordinator,
         api_key,
@@ -84,10 +83,6 @@ async def private_stack(
             peers["gateway"].command(
                 "serve", "--bg", "--tcp=22", "--proxy-protocol=1", f"tcp://127.0.0.1:{ssh_port}"
             )
-            for port in range(5000, 5008):
-                peers["gateway"].command(
-                    "serve", "--bg", f"--tcp={port}", f"tcp://127.0.0.1:{port}"
-                )
             public_origin = stack.enter_context(
                 serve_https(lambda origin: create_app(store, CONTROL), tmp_path)
             )
@@ -134,7 +129,7 @@ async def private_stack(
                 heartbeat_seconds=0.1,
             )
             trace = tmp_path / "private-connect.log"
-            transport = BBCP(str(binary), runner=adapters.runner(peers["mac"], trace))
+            transport = Rclone(str(binary), runner=adapters.runner(peers["mac"], trace))
             await service.start()
             service.transfers.transport = transport
             service.exports.transport = transport

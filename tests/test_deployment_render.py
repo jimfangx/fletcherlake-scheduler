@@ -15,7 +15,6 @@ from tests.deployment import TEMPLATES, inventory
 def test_rendered_bundle_keeps_ports_dns_and_endpoints_consistent(tmp_path):
     data = inventory(tmp_path, license_relay=True)
     data["license_relay"].update(manager_port=2101, vendor_port=2100)
-    data["gateway"].update(data_port_first=6100, data_port_last=6110)
     data["install_root"] = '/opt/fl deployment % "quoted"'
     data["certificate_root"] = '/etc/certificates with "quotes"'
     manifest = Deployment.model_validate(data)
@@ -23,8 +22,7 @@ def test_rendered_bundle_keeps_ports_dns_and_endpoints_consistent(tmp_path):
     output = tmp_path / "bundle"
     write_bundle(files, output)
     assert load(output / "manifest.yaml") == manifest
-    assert 'FL_GATEWAY_DATA_PORT_FIRST="6100"' in files["gateway/environment.defaults"]
-    assert 'FL_GATEWAY_DATA_PORT_LAST="6110"' in files["gateway/environment.defaults"]
+    assert "FL_GATEWAY_DATA_PORT" not in files["gateway/environment.defaults"]
     assert all(path.stat().st_mode & 0o077 == 0 for path in output.rglob("*") if path.is_file())
     with pytest.raises(FileExistsError):
         write_bundle(files, output)
@@ -34,8 +32,8 @@ def test_rendered_bundle_keeps_ports_dns_and_endpoints_consistent(tmp_path):
     assert "server vendor 192.0.2.30:2100 check" in relay
     policy = json.loads(files["scheduler/policy.json"])
     assert policy["acls"][0]["dst"][-1] == "tag:license-relay:2101,2100"
-    assert "tag:cluster:22,6100-6110" in policy["acls"][2]["dst"]
-    assert "tag:transfer-gateway:22,6100-6110" in policy["acls"][3]["dst"]
+    assert not any(dst.startswith("tag:cluster:") for dst in policy["acls"][2]["dst"])
+    assert "tag:transfer-gateway:22" in policy["acls"][3]["dst"]
     dns = yaml.safe_load(files["scheduler/headscale.yaml"])["dns"]["extra_records"]
     assert manifest.license_relay is not None
     assert dns[-1] == {"name": manifest.license_relay.hostname, "type": "A", "value": "100.64.0.30"}
@@ -43,7 +41,9 @@ def test_rendered_bundle_keeps_ports_dns_and_endpoints_consistent(tmp_path):
         endpoint = json.loads(files[f"gateway/{name}-endpoint.json"])
         assert endpoint["host"] == host
         assert endpoint["host_key"] == manifest.gateway.host_key
-        assert (endpoint["data_port_first"], endpoint["data_port_last"]) == (6100, 6110)
+        assert endpoint["port"] == 22
+        assert "data_port_first" not in endpoint
+        assert "data_port_last" not in endpoint
     assert (
         'WorkingDirectory=/opt/fl deployment %% "quoted"' in files["scheduler/fl-scheduler.service"]
     )

@@ -44,7 +44,7 @@ def detect_environment() -> EnvironmentConfig:
         riscv_toolchain=detect_tool("riscv_toolchain", "riscv64-unknown-elf-gcc"),
         gcc=detect_tool("gcc", "gcc"),
         clang=detect_tool("clang", "clang"),
-        bbcp=detect_tool("bbcp", "bbcp", "-V"),
+        rclone=detect_tool("rclone", "rclone", "version"),
         chipyard=os.environ.get("CHIPYARD"),
     )
 

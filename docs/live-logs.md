@@ -69,7 +69,7 @@ rotation, independently of polling waits. Ctrl-C ends monitoring without changin
 While the Mac is disconnected, authorized unexpired cached ranges can be read. Other ranges
 wait for a new read ACK, and running hardware continues locally. File replacement or truncation
 fails rather than combining bytes from different sources. Retained final logs and other artifacts
-can also be retrieved through the independent BBCP `results` workflow.
+can also be retrieved through the independent rclone/SFTP `results` workflow.
 
 Linux tests cover real PostgreSQL and WebSocket execution, binary output larger than a page,
 logs before completion, lost HTTP responses, scheduler reconnection without repeated execution,

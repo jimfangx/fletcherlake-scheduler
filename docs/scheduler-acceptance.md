@@ -47,7 +47,7 @@ This scenario starts the production HTTP/WSS composition and its default mainten
 in a separate process with its own PostgreSQL connection pool. Public submission and subsequent
 authentication use verified local HTTPS; the agent connects over WSS with the fixture CA trusted
 through `SSL_CERT_FILE`. Google identity and Directory providers are injected, and hardware is
-mocked. Enrollment, BBCP and notification delivery are exercised by their separate scenarios.
+mocked. Enrollment, rclone/SFTP and notification delivery are exercised by their separate scenarios.
 
 After two jobs start and two wait in a durable queue, the scheduler receives SIGKILL. One
 board stays running and another completes offline without advancing the PostgreSQL event cursor.
@@ -92,9 +92,9 @@ or credentials. Regular pytest explicitly skips this long test unless enabled. T
 `long acceptance` GitHub Actions workflow enables both tests and retains the duration report;
 the workflow must be run on GitHub separately to establish hosted CI evidence.
 
-These gates complement [BBCP/gateway verification](transfer-gateway.md) and
+These gates complement [rclone/SFTP/gateway verification](transfer-gateway.md) and
 [Headscale peer isolation](headscale-operations.md). [Combined private-network acceptance](private-network-acceptance.md)
-now exercises real private HTTPS/WSS, BBCP fetch/publication and native SSH source fencing,
+now exercises real private HTTPS/WSS, rclone/SFTP fetch/publication and native SSH source fencing,
 with both normal paths and forced local DERP transport.
 Its coordinator-restart gate stops the real Headscale/DERP process while the scheduler and
 agents remain alive, then verifies preserved identities, offline completion, pending cancellation

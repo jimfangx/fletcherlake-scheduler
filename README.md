@@ -17,10 +17,10 @@ The local Textual dashboard has readable status tables, metrics and job details;
 setup/reconfiguration edits host and board inventory with schema validation and cancellation.
 See [local interfaces](docs/local-interface.md).
 The Headscale
-adapter and shipped ACLs are tested with real userspace peers. The BBCP gateway transport,
-scoped HTTP control, integrity checks, revocation, and retention are tested with real BBCP/SSH.
+adapter and shipped ACLs are tested with real userspace peers. The rclone/SFTP gateway transport,
+scoped HTTP control, integrity checks, revocation, and retention are tested with real rclone and OpenSSH.
 Durable scheduler delivery and Mac fetch/verification now gate execution through live WebSockets.
-Combined [private-network acceptance](docs/private-network-acceptance.md) carries native BBCP,
+Combined [private-network acceptance](docs/private-network-acceptance.md) carries native rclone/SFTP,
 private HTTPS/WSS and terminal submission/results through actual Headscale peers, with normal
 paths and forced local DERP transport. Native Mac networking remains an operational gate.
 Public reserved upload grants and protected idempotent receipts automate terminal submission.
@@ -30,7 +30,9 @@ cluster/board/job views and administrator enrollment/user pages with same-origin
 See [dashboard build and operation](docs/scheduler-dashboard.md) and
 [the requirement audit](docs/requirement-audit.md) for source/test traceability and deployment
 validation still required. The [requirement ledger](docs/implementation-status.md) preserves
-detailed regression evidence, including an unresolved intermittent public BBCP upload timeout.
+historical regression evidence, including a prior BBCP upload timeout. The current transport
+uses rclone/SFTP; follow the [migration instructions](docs/transfer-gateway.md#migrating-an-existing-bbcp-deployment)
+when upgrading an existing deployment.
 The reviewed Linux deployment renderer keeps explicit listener addresses, private DNS,
 ACL ports and pinned SSH endpoints consistent. See [Linux deployment](docs/linux-deployment.md).
 

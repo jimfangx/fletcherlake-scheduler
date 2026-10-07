@@ -8,7 +8,6 @@ from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID
 
-from fl_common.bbcp import BBCP
 from fl_common.errors import PlatformError
 from fl_common.files import fsync_directory, sha256_file
 from fl_common.models import ArtifactRecord
@@ -16,6 +15,7 @@ from fl_common.models.artifact import ARTIFACT_FILENAMES
 from fl_common.models.base import utcnow
 from fl_common.models.download import DownloadTicket
 from fl_common.models.scheduler import Principal
+from fl_common.rclone import Rclone
 from pydantic import TypeAdapter
 
 from .api import RemoteClient
@@ -39,11 +39,11 @@ class Results:
         self,
         client: RemoteClient,
         *,
-        bbcp: BBCP | None = None,
+        rclone: Rclone | None = None,
         display: Callable[[str], None] = print,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        self.client, self.bbcp, self.display, self.sleep = client, bbcp, display, sleep
+        self.client, self.rclone, self.display, self.sleep = client, rclone, display, sleep
 
     def run(self, job_id: UUID, destination: Path, *, inputs: bool = False) -> list[Path]:
         store = DownloadReceipts(destination)
@@ -114,7 +114,7 @@ class Results:
                     raise PlatformError(
                         "OUTPUT_EXISTS", "Use another output directory for different files"
                     )
-                transport = self.bbcp or BBCP()
+                transport = self.rclone or Rclone()
                 descriptor, name = tempfile.mkstemp(prefix=".download-", dir=store.destination)
                 os.close(descriptor)
                 partial = Path(name)

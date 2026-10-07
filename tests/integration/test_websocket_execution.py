@@ -196,7 +196,7 @@ async def test_staging_reserves_then_verified_inputs_execute(
 
     with scheduler_db.transaction() as session:
         assert session.get(Assignment, spec.job_id).state == "STAGING"
-    # Inject bytes here; the gateway/BBCP transport remains separate implementation work.
+    # Inject bytes here; the gateway/Rclone transport remains separate implementation work.
     for kind, source in input_files.items():
         target.store.copy_input(spec.job_id, kind, Path(source))
     commands.enqueue_after_transfer(spec.job_id)

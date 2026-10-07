@@ -68,7 +68,7 @@ pytest_plugins = [
     "tests.auth",
     "tests.headscale",
     "tests.tailscale",
-    "tests.bbcp",
+    "tests.rclone",
     "tests.connected",
     "tests.artifact_exports",
     "tests.retirement_stack",

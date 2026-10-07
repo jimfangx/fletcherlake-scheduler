@@ -40,10 +40,10 @@ there is no smart-plug service or token to configure.
 | Headscale + nginx | Scheduler Linux host | `headscale`; `/etc/headscale` | Yes |
 | PostgreSQL | Scheduler host or private database service | Dedicated database and login | Yes |
 | Scheduler + React dashboard | Scheduler Linux host | `fl-scheduler`; `/etc/fl/scheduler.env` | Scheduler yes; UI optional |
-| Gateway HTTP service + BBCP SSH service + nginx | Gateway Linux host | `fl-transfer`; `/etc/fl/transfer-gateway.env` | For remote artifact transfer |
+| Gateway HTTP service + scoped SFTP SSH service + nginx | Gateway Linux host | `fl-transfer`; `/etc/fl/transfer-gateway.env` | For remote artifact transfer |
 | Tailscale infrastructure clients | Both Linux hosts and each Mac | Administrator-issued Headscale joins | Yes |
 | Agent, workers, local SDK/CLI/TUI | Each Mac Mini | System launchd service | Yes |
-| Remote client, BBCP and OpenSSH | User Linux/Chipyard or Mac host | User-owned client credentials | For terminal submission |
+| Remote client, rclone and OpenSSH | User Linux/Chipyard or Mac host | User-owned client credentials | For terminal submission |
 | Google OAuth + Workspace Groups | Google project and Workspace organization | OAuth client and group-owner service-account JSON (or delegated Directory) | Yes |
 | Mailgun, Slack, Google Chat | External providers; workers run in scheduler | Optional protected notification JSON | No |
 | BWRC license relay | Additional BWRC-connected Linux host | HAProxy and explicit private license ports | No |
@@ -436,7 +436,7 @@ These are sizing recommendations, not measured production capacity guarantees:
 | VM | Machine type | vCPUs / memory | Boot disk | Separate data disk |
 | --- | --- | --- | --- | --- |
 | `fl-scheduler`: scheduler, PostgreSQL, dashboard, Headscale and nginx | `e2-standard-2` | 2 / 8 GB | 50 GiB `pd-balanced` | 100 GiB `pd-balanced` for PostgreSQL and service state |
-| `fl-transfer-gateway`: BBCP/OpenSSH, Tailscale and nginx | `e2-standard-4` | 4 / 16 GB | 50 GiB `pd-balanced` | Initially 500 GiB `pd-balanced` for `/var/lib/fl-transfer` |
+| `fl-transfer-gateway`: scoped SFTP/OpenSSH, Tailscale and nginx | `e2-standard-4` | 4 / 16 GB | 50 GiB `pd-balanced` | Initially 500 GiB `pd-balanced` for `/var/lib/fl-transfer` |
 
 Use Ubuntu 24.04 LTS x86-64, regular non-Spot VMs, and the same region near the physical Macs.
 Mount data disks before creating service state or starting services. Ensure mounts are present
@@ -451,7 +451,7 @@ downloads them. Exported results have their own retention deadlines. Size its da
 500 GiB is only a starting point. Monitor disk usage, CPU and actual transfer throughput.
 
 Google lists `e2-standard-2` and `e2-standard-4` with maximum egress bandwidth of up to 4 and
-8 Gbps respectively. These are VM ceilings, not BBCP speed guarantees: disk performance,
+8 Gbps respectively. These are VM ceilings, not rclone/SFTP speed guarantees: disk performance,
 encryption, shared uplinks and the Mac's network can limit transfers first. Balanced disk
 throughput also depends on provisioned capacity and VM limits. For sustained transfer needs,
 measure the bottleneck before changing the gateway's machine type or disk.
@@ -630,7 +630,7 @@ means your actual administrator/VPN public source range, usually a single IPv4 `
 | Rule | Target tag(s) | Allowed protocol/ports | Source IPv4 ranges | Purpose |
 | --- | --- | --- | --- | --- |
 | `fl-public-https` | `fl-scheduler`, `fl-transfer-gateway` | TCP `443` | `0.0.0.0/0` | Scheduler/login, Headscale coordination and gateway verification |
-| `fl-gateway-transfer` | `fl-transfer-gateway` | TCP `22`, `5000-5099` | `0.0.0.0/0` | Scoped BBCP SSH/bootstrap and payloads from arbitrary Chipyard hosts |
+| `fl-gateway-transfer` | `fl-transfer-gateway` | TCP `22` | `0.0.0.0/0` | Scoped encrypted SFTP transfers from arbitrary Chipyard hosts |
 | `fl-tailnet-direct` | `fl-scheduler`, `fl-transfer-gateway` | UDP `41641` | `0.0.0.0/0` | Recommended for direct encrypted Tailscale peer connections; confirm tailscaled's actual port |
 | `fl-scheduler-admin` | `fl-scheduler` | TCP `22` | `ADMIN_EGRESS_CIDR` | Administrative SSH |
 | `fl-gateway-admin` | `fl-transfer-gateway` | TCP `2222` | `ADMIN_EGRESS_CIDR` | Administrative SSH after moving the OS daemon off transfer port 22 |
@@ -647,7 +647,7 @@ Section 8 contains the command that opens the gateway's final public transfer ru
 its dedicated SSH daemon is installed. Do not open that rule during initial administrative
 SSH bootstrap.
 
-Adjust the BBCP range if the manifest changes. The custom VPC keeps implied ingress denial
+The custom VPC keeps implied ingress denial
 for other ports; ensure inherited organization policies and any additional project rules
 agree. In particular, do not add a general all-ports internal rule or a world-accessible
 administrative SSH rule. PostgreSQL `5432`, application `8080/8081`, and Headscale metrics/gRPC
@@ -662,7 +662,7 @@ public inbound STUN/3478 listener.
 
 Mirror the required listeners in any host firewall. GCP sees the encrypted Tailscale transport;
 inner connections to the `100.64.x.x` services are controlled by Headscale ACLs and the Linux
-host firewall on `tailscale0`. Allow private scheduler HTTPS and private gateway HTTPS/SSH/BBCP
+host firewall on `tailscale0`. Allow private scheduler HTTPS and private gateway HTTPS/SSH/SFTP
 according to the rendered ACLs. Verify direct and DERP fallback paths before production file
 transfers; the VPC TCP-443 rule alone does not establish private agent connectivity.
 See [GCP firewall rules](https://docs.cloud.google.com/firewall/docs/firewalls),
@@ -863,7 +863,7 @@ Google login/Groups credentials. If you restrict token source IPs, include your 
 workstation and both VMs' reserved external IPs; keep the token valid for renewals.
 
 Keep all three service records **DNS only (gray cloud)** in this deployment. This exposes
-the reserved VM address directly for Headscale and the gateway's SSH/BBCP ports. Private
+the reserved VM address directly for Headscale and the gateway's SSH/SFTP ports. Private
 agent/control records remain in Headscale; no public A records point to Headscale IPs.
 Do not put Cloudflare Access browser challenges in front of these service endpoints.
 
@@ -1049,7 +1049,7 @@ renewal hook. Test renewals again after final nginx installation with
 `flssh gateway 'sudo certbot renew --dry-run --run-deploy-hooks'`.
 
 Cloud and host firewalls must agree. Allow public TCP 443 to the coordinator/scheduler and
-gateway; allow gateway TCP 22 and the configured BBCP range (default 5000–5099). Restrict
+gateway; allow gateway TCP 22 for encrypted SFTP transfers. Restrict
 administrative access to the management path. Keep PostgreSQL and application ports 8080/8081
 off the public network. Macs initiate scheduler and transfer connections; no public Mac listener
 or incoming Mac SSH service is required. Permit the Tailscale transport needed for your topology;
@@ -1061,9 +1061,8 @@ On GCP, use [the NIC/address settings](#gcp-nic-and-vm-creation-settings) and
 site when installing the rendered fragments so its wildcard/HTTP listeners do not add services
 outside this plan.
 
-The public BBCP payload hop is unencrypted. SSH protects its bootstrap, SHA checks verify
-integrity, and Headscale encrypts the private hop. Account for this when deciding which artifacts
-may cross the public transfer endpoint.
+All public and private payloads use SFTP over encrypted SSH. Private transfers also traverse
+Headscale. Independent SHA-256 and declared-size checks gate publication and execution.
 
 ## 5. Linux checkout and service accounts
 
@@ -1099,7 +1098,7 @@ source "$HOME/fl-secrets/resources.env"
 FL_ROLE=$1
 sudo apt-get update
 sudo apt-get install -y nginx openssh-server git curl jq python3 python3-venv \
-  build-essential pkg-config libssl-dev zlib1g-dev libnsl-dev certbot \
+  certbot \
   python3-certbot-dns-google python3-certbot-dns-route53 python3-certbot-dns-cloudflare
 if [ "$FL_ROLE" = scheduler ]; then
   FL_VOLUME=${FL_AWS_SCHEDULER_VOLUME:-}; FL_DIRS=(postgresql headscale)
@@ -1334,7 +1333,7 @@ manifest = {
     'gateway': {'public_ip': os.environ['FL_GATEWAY_NIC_IP'],
                 'private_ip': os.environ['FL_GATEWAY_HEADSCALE_IP'],
                 'hostname': f'transfer.{d}', 'private_hostname': f'gateway.internal.{d}',
-                'host_key': key, 'data_port_first': 5000, 'data_port_last': 5099},
+                'host_key': key},
     'license_relay': None,
 }
 (root / 'deployment.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -1385,13 +1384,13 @@ Headscale remains available. Both private addresses must exist before nginx vali
 
 Review the generated bundle before installation. `/etc/headscale` files use root/headscale
 ownership and mode 0640; transfer endpoint JSON is owned by `fl-scheduler`, mode 0600.
-The renderer refuses an existing destination and keeps fixed listener/data ports, private
+The renderer refuses an existing destination and keeps SSH listener ports, private
 DNS, ACLs and SSH host-key pins consistent. `license_relay: null` emits no relay deployment.
 See [Linux deployment](linux-deployment.md) for native validators and optional relay rendering.
 
 ## 8. Transfer gateway
 
-**AWS or GCP operator commands:** transfer the shared control secret, install BBCP, the API
+**AWS or GCP operator commands:** transfer the shared control secret, install the API
 environment and dedicated SSH unit, validate, and start. The public transfer firewall opens
 only after administrative SSH on port 2222 and the forced-command daemon on port 22 work.
 
@@ -1399,9 +1398,6 @@ only after administrative SSH on port 2222 and the forced-command daemon on port
 flput gateway "$FL_STATE/gateway-control-secret" fl-secrets/gateway-control-secret
 flssh gateway 'bash -se' <<'HOST'
 cd /opt/fl
-sudo pixi run python tests/build_bbcp.py --directory /tmp/fl-bbcp
-sudo install -d -m 755 /opt/fl-tools
-sudo install -m 755 /tmp/fl-bbcp/bbcp /opt/fl-tools/bbcp
 sudo install -m 600 -o fl-transfer -g fl-transfer \
   "$HOME/fl-secrets/gateway-control-secret" /var/lib/fl-transfer/control-secret
 sudo install -m 600 "$HOME/fl-secrets/gateway-bundle/environment.defaults" /etc/fl/transfer-gateway.env
@@ -1435,13 +1431,11 @@ HOST
 flssh gateway 'hostname'   # must connect to management port 2222 successfully
 ```
 
-**AWS:** open the scoped transfer SSH and BBCP payload range after that verification:
+**AWS:** open the scoped transfer SSH port after that verification:
 
 ```sh
 aws ec2 authorize-security-group-ingress --group-id "$FL_AWS_GATEWAY_SG" \
   --protocol tcp --port 22 --cidr 0.0.0.0/0
-aws ec2 authorize-security-group-ingress --group-id "$FL_AWS_GATEWAY_SG" \
-  --protocol tcp --port 5000-5099 --cidr 0.0.0.0/0
 aws ec2 revoke-security-group-ingress --group-id "$FL_AWS_GATEWAY_SG" \
   --protocol tcp --port 22 --cidr "$FL_ADMIN_CIDR"
 ```
@@ -1451,7 +1445,7 @@ aws ec2 revoke-security-group-ingress --group-id "$FL_AWS_GATEWAY_SG" \
 ```sh
 gcloud compute firewall-rules create fl-gateway-transfer --project="$FL_GCP_PROJECT" \
   --network=fl-vpc --direction=INGRESS --priority=1000 --action=ALLOW \
-  --target-tags=fl-transfer-gateway --source-ranges=0.0.0.0/0 --rules=tcp:22,tcp:5000-5099
+  --target-tags=fl-transfer-gateway --source-ranges=0.0.0.0/0 --rules=tcp:22
 gcloud compute firewall-rules update fl-bootstrap-admin --project="$FL_GCP_PROJECT" \
   --target-tags=fl-scheduler
 ```
@@ -1461,11 +1455,42 @@ only once. Transfer SSH continues to allow only `fl-transfer` with service-gener
 no shell, password, TTY or forwarding.
 
 The gateway's HTTP API binds to loopback; nginx exposes separate public verification and
-private control listeners. Scoped BBCP uses dedicated SSH on port 22 and data ports 5000–5099.
-The gateway control credential must match the scheduler's protected value. The public BBCP
-payload hop is unencrypted; the Headscale hop is encrypted and independent SHA checks gate
-execution. Input retention is one day from first upload grant; exported results have their
+private control listeners. Scoped SFTP uses only dedicated SSH on port 22; there are no
+separate payload ports. The gateway runs the Python manifest-scoped SFTP server behind its
+forced SSH commands; it needs no rclone binary. Users and Macs run rclone. The gateway control
+credential must match the scheduler's protected value. Every payload hop is encrypted over SSH,
+and independent SHA checks gate execution. Input retention is one day from first upload grant; exported results have their
 own deadlines. See [gateway operations](transfer-gateway.md).
+
+### Upgrading an existing transfer gateway
+
+For a new installation, use the TCP-22-only rules above. For an existing BBCP deployment,
+first complete the [coordinated rollout](transfer-gateway.md#migrating-an-existing-bbcp-deployment):
+install rclone on users/Macs, update all component checkouts and Mac `environment.rclone.path`,
+remove obsolete transport fields, re-render the bundle, and restart the gateway services.
+Preserve the gateway database, payloads, control credential and host key.
+
+Then close the old payload range. Run only the command for your hosting provider.
+
+**AWS**, if the earlier guide's world-accessible payload-range rule is present:
+
+```sh
+aws ec2 revoke-security-group-ingress --group-id "$FL_AWS_GATEWAY_SG" \
+  --protocol tcp --port 5000-5099 --cidr 0.0.0.0/0
+```
+
+**GCP**, to replace the earlier gateway rule with SSH only:
+
+```sh
+gcloud compute firewall-rules update fl-gateway-transfer --project="$FL_GCP_PROJECT" \
+  --rules=tcp:22
+```
+
+Remove the equivalent old range from any host firewall or additional cloud rules. Private
+Headscale ACLs should permit gateway file transfer only on TCP 22, alongside the existing
+HTTPS control rules. Remove the former gateway-to-Mac transfer rule; SFTP needs no inbound
+Mac listener. Perform a submission and results download through the new transport,
+including private Mac fetch/publication, before resuming production work.
 
 ## 9. PostgreSQL, scheduler and dashboard
 
@@ -1598,7 +1623,7 @@ FL_MAC_SSH=REPLACE_WITH_ADMIN_USER@REPLACE_WITH_MAC_HOST
 scp "$FL_STATE/source.tar" "$FL_MAC_SSH:fl-source.tar"
 ```
 
-**On the Apple Silicon Mac**, use an administrator account. Install Homebrew and an active
+**On the Apple Silicon Mac**, use an administrator account. Install an active
 Tailscale Mac app first; approve its macOS network extension and make its CLI available on
 PATH. These are Mac prerequisites, shared by either hosting provider. Apple's command-line
 tools prompt is interactive; finish it before running the second block:
@@ -1608,14 +1633,13 @@ xcode-select --install
 ```
 
 If the tools are already installed, skip that command. Create a fresh `/opt/fl` checkout owned
-by this trusted administrator, install the pinned Pixi binary and build the checksum-pinned BBCP:
+by this trusted administrator, install the pinned Pixi and checksum-pinned rclone binaries:
 
 ```sh
 set -euo pipefail
 export FL_DOMAIN=REPLACE_WITH_THE_SAME_DEPLOYED_DOMAIN
 export FL_PIXI_VERSION=v0.65.0
 xcode-select -p
-brew install openssl@3
 sudo install -d -m 755 -o "$(id -un)" /opt/fl
 tar -xf "$HOME/fl-source.tar" -C /opt/fl
 curl -fsSL https://pixi.sh/install.sh -o /tmp/fl-pixi-install.sh
@@ -1623,19 +1647,19 @@ sudo env PIXI_VERSION="$FL_PIXI_VERSION" PIXI_HOME=/opt/pixi PIXI_BIN_DIR=/usr/l
   PIXI_NO_PATH_UPDATE=1 bash /tmp/fl-pixi-install.sh
 cd /opt/fl
 pixi install --locked
-pixi run python tests/build_bbcp.py --directory /tmp/fl-bbcp \
-  --openssl-prefix "$(brew --prefix openssl@3)"
+pixi run python tests/download_rclone.py --directory /tmp/fl-rclone
 sudo install -d -m 755 /opt/fl-tools
-sudo install -m 755 /tmp/fl-bbcp/bbcp /opt/fl-tools/bbcp
+sudo install -m 755 /tmp/fl-rclone/rclone /opt/fl-tools/rclone
 export PATH="/opt/fl-tools:/usr/local/bin:$PATH"
 tailscale version
 ```
 
-Set `environment.bbcp.path: /opt/fl-tools/bbcp` in the cluster overrides so launchd can find
-it independently of your shell's PATH. Record the installed macOS, Tailscale and OpenSSL
-versions with your inventory. Homebrew's OpenSSL formula can change; reproduce its recorded
-version when rebuilding the same native toolchain.
-Source: [Homebrew OpenSSL](https://formulae.brew.sh/formula/openssl@3).
+Set `environment.rclone.path: /opt/fl-tools/rclone` in the cluster overrides so launchd can find
+it independently of your shell's PATH. Record the installed macOS, Tailscale and rclone
+versions with your inventory. The helper downloads official rclone v1.75.1 for native
+Apple Silicon or Intel Macs and verifies the pinned archive checksum. macOS 12 or later is
+required by this rclone release; no OpenSSL build or local rclone compilation is needed.
+Source: [rclone downloads](https://rclone.org/downloads/).
 
 For Vivado Lab, keep `license_relay` disabled. However, AMD's published supported-OS table
 lists Windows/Linux, not native macOS. Validate your chosen tool environment or wrapper and
@@ -1688,27 +1712,23 @@ The remaining common submission/result commands below require your actual job YA
 those are job inputs, not cloud provisioning parameters.
 
 On an ordinary Linux/Chipyard or Mac user host, use a checkout of the same reviewed revision,
-Pixi and OpenSSH. On Ubuntu, install the BBCP compiler prerequisites if missing:
+Pixi and OpenSSH. On Ubuntu, install the SSH client if missing:
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y build-essential libssl-dev zlib1g-dev libnsl-dev openssh-client
+sudo apt-get install -y openssh-client
 ```
 
-From that checkout, build BBCP into a user-owned directory. On macOS, use the Apple
-command-line tools and Homebrew OpenSSL prerequisites above; no cloud credentials or
-Headscale membership are needed for this client:
+From that checkout, install the pinned official rclone binary into a user-owned directory.
+The helper supports Linux x86-64/arm64 and macOS Apple Silicon/Intel and verifies the archive
+checksum before extracting the binary. No cloud credentials or Headscale membership are
+needed for this client:
 
 ```sh
 pixi install --locked
 mkdir -p "$HOME/.local/bin"
-if [ "$(uname -s)" = Darwin ]; then
-  pixi run python tests/build_bbcp.py --directory "$HOME/.cache/fl-bbcp" \
-    --openssl-prefix "$(brew --prefix openssl@3)"
-else
-  pixi run python tests/build_bbcp.py --directory "$HOME/.cache/fl-bbcp"
-fi
-install -m 755 "$HOME/.cache/fl-bbcp/bbcp" "$HOME/.local/bin/bbcp"
+pixi run python tests/download_rclone.py --directory "$HOME/.cache/fl-rclone"
+install -m 755 "$HOME/.cache/fl-rclone/rclone" "$HOME/.local/bin/rclone"
 export PATH="$HOME/.local/bin:$PATH"
 pixi run fl-client login --scheduler "https://scheduler.$FL_DOMAIN"
 pixi run fl-client submit /path/to/job.yaml --follow
@@ -1917,8 +1937,9 @@ private DNS/TLS, a mock terminal submission with ELF+bitstream and independent r
 owner/non-member denial, public rejection of agent/control routes, and notification delivery
 for each enabled provider. Then validate actual firmware and Mac restart/sleep/wake behavior.
 Tests establish Linux simulated/native-tool behavior; live cloud/Workspace/Mac/provider setup
-is not automatically proven by a passing test suite. An intermittent public BBCP upload timeout
-remains documented in [the audit](requirement-audit.md).
+is not automatically proven by a passing test suite. Historical BBCP acceptance remains
+documented in [the audit](requirement-audit.md); the new rclone transport requires actual Mac
+and production throughput checks before deployment acceptance.
 
 | Symptom | Check |
 | --- | --- |
@@ -1929,7 +1950,7 @@ remains documented in [the audit](requirement-audit.md).
 | GCP requested IP outside subnetwork range | `10.80.0.x` requires the example `fl-subnet` (`10.80.0.0/24`); select it in both reservation and NIC forms, or use an address from the existing subnet's actual CIDR |
 | nginx cannot bind private listener | Actual allocated Headscale address, tailscaled startup and final manifest |
 | Gateway SSH denied | Host key pin, issued grant, correct source, account lock/shell, StrictModes, listener conflict |
-| BBCP stalls | TCP data range in cloud/host firewall, matching manifest/ACL, dedicated range, credential deadline |
+| rclone/SFTP stalls | TCP 22 in cloud/host firewall and Headscale ACL, pinned host key, source-bound identity, storage capacity, credential deadline |
 | Mac configuration incomplete | Correct the inventory and rerun setup confirm; do not forge the marker |
 
 Inspect `systemctl status`/`journalctl -u` for Linux units; Mac logs are in the agent state's

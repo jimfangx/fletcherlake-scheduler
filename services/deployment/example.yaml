@@ -11,12 +11,9 @@ gateway:
   hostname: transfer.example.edu
   private_hostname: gateway.internal.example.edu
   host_key: REPLACE_WITH_CANONICAL_ED25519_PUBLIC_HOST_KEY
-  data_port_first: 5000
-  data_port_last: 5099
 # Vivado Lab on the Macs does not need BWRC forwarding. Omission also disables it.
 # To enable forwarding, replace null with the mapping in docs/license-relay.md.
 license_relay: null
 install_root: /opt/fl
 certificate_root: /etc/letsencrypt/live
 headscale_binary: /usr/local/bin/headscale
-bbcp_binary: /opt/fl-tools/bbcp

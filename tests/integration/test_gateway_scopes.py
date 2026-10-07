@@ -20,7 +20,7 @@ CONTROL = "different protected control credential of sufficient length"
 
 
 def test_control_is_separate_from_upload_verification(tmp_path):
-    store = GatewayStore(tmp_path / "gateway", tmp_path / "bbcp")
+    store = GatewayStore(tmp_path / "gateway")
     scope, _ = grant(tmp_path, b"expected bytes")
     with TestClient(create_app(store, SecretStr(CONTROL))) as client:
         payload = scope.model_dump(mode="json")
@@ -65,7 +65,7 @@ def test_control_is_separate_from_upload_verification(tmp_path):
 
 
 def test_revocation_during_receive_fences_publication(tmp_path):
-    store = GatewayStore(tmp_path / "gateway", tmp_path / "bbcp")
+    store = GatewayStore(tmp_path / "gateway")
     scope, _ = grant(tmp_path, b"expected bytes")
     store.register(scope)
 
@@ -85,7 +85,7 @@ def test_revocation_during_receive_fences_publication(tmp_path):
 def test_revocation_during_verification_cannot_resurrect_upload(
     tmp_path, monkeypatch, already_verified
 ):
-    store = GatewayStore(tmp_path / "gateway", tmp_path / "bbcp")
+    store = GatewayStore(tmp_path / "gateway")
     scope, _ = grant(tmp_path, b"expected bytes")
     store.register(scope)
     receive(store, scope.transfer_id, "binary", io.BytesIO(b"expected bytes"))
@@ -104,7 +104,7 @@ def test_revocation_during_verification_cannot_resurrect_upload(
 
 
 def test_expired_retention_is_durable_and_deletion_retries(tmp_path, monkeypatch):
-    store = GatewayStore(tmp_path / "gateway", tmp_path / "bbcp")
+    store = GatewayStore(tmp_path / "gateway")
     scope, _ = grant(tmp_path, b"expected bytes")
     store.register(scope)
     receive(store, scope.transfer_id, "binary", io.BytesIO(b"expected bytes"))
@@ -116,26 +116,18 @@ def test_expired_retention_is_durable_and_deletion_retries(tmp_path, monkeypatch
         assert store.lookup(scope.transfer_id, active=False)[1] == "REVOKED"
         assert store.path(scope, "binary").exists()
         assert (store.root / "authorized_keys").read_text() == ""
-    sweep(GatewayStore(store.root, store.bbcp))
+    sweep(GatewayStore(store.root))
     assert not store.path(scope, "binary").exists()
 
 
 @pytest.mark.parametrize(
-    "command,options,path",
-    [
-        ("sh", "", "binary"),
-        ("bbcp SNK", " -C /etc/passwd", "binary"),
-        ("bbcp SNK", " -e /bin/sh", "binary"),
-        ("bbcp SNK", " -z", "binary"),
-        ("bbcp SNK", " -Y " + "b" * 64, "binary"),
-        ("bbcp SNK", "", "../../outside"),
-        ("bbcp SNK", "", "results"),
-    ],
+    "command",
+    ["sh", "sftp", "rclone", "md5sum /etc/passwd", "internal-sftp -R", "internal-sftp; sh"],
 )
-def test_forced_command_rejects_shell_options_and_paths(tmp_path, command, options, path):
-    scope, _ = grant(tmp_path, b"expected bytes")
-    wire = (
-        f"-n -N o -s 4 -Y {'a' * 64} -H none:0{options}\n/transfer/{scope.transfer_id}/{path}\n\0"
-    ).encode()
+def test_forced_command_rejects_shell_options_and_paths(command):
     with pytest.raises(PlatformError):
-        request(io.BytesIO(wire), scope, command)
+        request(command)
+
+
+def test_forced_command_accepts_only_configured_subsystem():
+    request("internal-sftp")

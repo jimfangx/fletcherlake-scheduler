@@ -20,13 +20,8 @@ from .authorized_keys import write_keys
 
 
 class GatewayStore:
-    def __init__(
-        self, root: Path, bbcp: Path, *, data_port_first: int = 5000, data_port_last: int = 5099
-    ) -> None:
-        if not 1024 <= data_port_first <= data_port_last - 7 <= 65528:
-            raise ValueError("BBCP requires at least eight unprivileged data ports")
-        self.data_port_first, self.data_port_last = data_port_first, data_port_last
-        self.root, self.bbcp = root.resolve(), bbcp.resolve()
+    def __init__(self, root: Path) -> None:
+        self.root = root.resolve()
         self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
         self.root.chmod(0o700)
         with self.connection() as connection:
@@ -189,4 +184,4 @@ class GatewayStore:
         """Caller holds the registry lock; retry/startup repairs a crash after DB commit."""
         with self.connection() as connection:
             rows = connection.execute("SELECT grant_json,state FROM transfers").fetchall()
-        write_keys(self.root, self.bbcp, self.data_port_first, self.data_port_last, rows)
+        write_keys(self.root, rows)

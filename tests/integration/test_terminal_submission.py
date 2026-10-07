@@ -1,4 +1,4 @@
-"""Public terminal submission through real SSH/BBCP and connected mock Mac agents."""
+"""Public terminal submission through real SSH/Rclone and connected mock Mac agents."""
 
 import asyncio
 
@@ -10,8 +10,8 @@ from fl_client.credentials import Credentials, CredentialStore
 from fl_client.receipts import ReceiptStore
 from fl_client.results import Results
 from fl_client.submission import Submission
-from fl_common.bbcp import BBCP
 from fl_common.models import JobConfig, ResourceConstraints
+from fl_common.rclone import Rclone
 from fl_gateway.api import create_app as gateway_app
 from fl_scheduler.artifacts.api import Downloads
 from fl_scheduler.artifacts.service import ExportService
@@ -30,7 +30,7 @@ from tests.connected import state, until
 CONTROL = SecretStr("terminal acceptance private control credential")
 
 
-class CountingBBCP(BBCP):
+class CountingRclone(Rclone):
     def __init__(self, binary):
         super().__init__(str(binary))
         self.copies = []
@@ -42,9 +42,9 @@ class CountingBBCP(BBCP):
 
 @pytest.mark.parametrize("lost_path", ["/api/submissions", "/delivery"])
 async def test_public_terminal_submission_recovers_lost_responses_without_duplicate_execution(
-    scheduler_db, connected_agents, bbcp_gateway, auth_stack, tmp_path, lost_path
+    scheduler_db, connected_agents, rclone_gateway, auth_stack, tmp_path, lost_path
 ):
-    store, endpoint, binary = bbcp_gateway
+    store, endpoint, binary = rclone_gateway
     sessions, login, _, provider, _ = auth_stack
     tokens = await sessions.issue(provider.identity)
     credentials = CredentialStore(tmp_path / "client" / "credentials.json")
@@ -53,8 +53,8 @@ async def test_public_terminal_submission_recovers_lost_responses_without_duplic
     receipt_store = ReceiptStore(tmp_path / "submission" / "receipt.json")
     display, calls = [], []
     target = connected_agents[1][0]
-    target.transfers.transport = BBCP(str(binary))
-    target.exports.transport = BBCP(str(binary))
+    target.transfers.transport = Rclone(str(binary))
+    target.exports.transport = Rclone(str(binary))
     source = tmp_path / "input with spaces.elf"
     source.write_bytes(b"ordinary user payload\n" * 8192)
     bitstream = tmp_path / "FPGA with spaces.bit"
@@ -115,9 +115,9 @@ async def test_public_terminal_submission_recovers_lost_responses_without_duplic
                     response.status_code, headers=response.headers, content=response.content
                 )
 
-            transport = CountingBBCP(binary)
+            transport = CountingRclone(binary)
             with RemoteClient(credentials, transport=httpx.MockTransport(handle)) as client:
-                workflow = Submission(client, bbcp=transport, display=display.append)
+                workflow = Submission(client, rclone=transport, display=display.append)
                 with pytest.raises(httpx.ReadError, match="lost response"):
                     await asyncio.wait_for(
                         asyncio.to_thread(workflow.run, receipt_store, config), 30
@@ -131,11 +131,11 @@ async def test_public_terminal_submission_recovers_lost_responses_without_duplic
                 again = await asyncio.to_thread(workflow.run, receipt_store)
                 assert again == spec
                 assert [kind for _, kind in transport.copies] == ["binary", "bitstream"]
-                results = Results(client, bbcp=transport, display=display.append)
+                results = Results(client, rclone=transport, display=display.append)
                 destination = tmp_path / "downloaded results"
                 paths = await asyncio.wait_for(
                     asyncio.to_thread(results.run, spec.job_id, destination, inputs=True),
-                    90,  # Five files traverse both BBCP hops, each with a fresh guardian process.
+                    90,  # Five files traverse both Rclone hops, each with a fresh guardian process.
                 )
                 copies = list(transport.copies)
                 assert (destination / "binary").read_bytes() == source.read_bytes()

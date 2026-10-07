@@ -1,4 +1,4 @@
-"""Disposable SSH gateway for integration tests against an explicitly supplied BBCP."""
+"""Disposable SSH gateway for integration tests against an explicitly supplied Rclone."""
 
 import getpass
 import json
@@ -17,14 +17,14 @@ from tests.headscale import free_port
 
 
 @pytest.fixture
-def bbcp_gateway(tmp_path):
-    selected = os.environ.get("FL_TEST_BBCP")
+def rclone_gateway(tmp_path):
+    selected = os.environ.get("FL_TEST_RCLONE")
     if not selected:
-        pytest.skip("Set FL_TEST_BBCP to a built official BBCP binary")
+        pytest.skip("Set FL_TEST_RCLONE to a downloaded official rclone binary")
     binary = Path(selected).resolve()
     assert binary.is_file()
     sshd = shutil.which("sshd") or "/usr/sbin/sshd"
-    store = GatewayStore(tmp_path / "gateway with spaces", binary)
+    store = GatewayStore(tmp_path / "gateway with spaces")
     host_key = tmp_path / "host-key"
     public = create_identity(host_key)
     port = free_port()
@@ -38,6 +38,7 @@ def bbcp_gateway(tmp_path):
         f"AuthorizedKeysFile {json.dumps(str(store.root / 'authorized_keys'))}\n"
         "AllowTcpForwarding no\nX11Forwarding no\nPermitTTY no\n"
         f"AllowUsers {getpass.getuser()}\nLogLevel ERROR\n"
+        "Subsystem sftp internal-sftp\n"
     )
     logs = (tmp_path / "sshd.log").open("w+")
     process = subprocess.Popen([sshd, "-D", "-e", "-f", str(config)], stdout=logs, stderr=logs)

@@ -8,7 +8,7 @@ The REST adapter is checked against its
 Use the [Linux deployment renderer](linux-deployment.md) to keep hostnames, explicit listener
 addresses, private DNS, license ports and transfer ACLs consistent before installing templates.
 See [combined private-network acceptance](private-network-acceptance.md) for actual private
-HTTPS/WSS, BBCP payloads and assigned-node SSH source fencing with userspace peers.
+HTTPS/WSS, rclone/SFTP payloads and assigned-node SSH source fencing with userspace peers.
 
 Install the official Headscale release and verify its published checksum before execution.
 Create an unprivileged `headscale` service account and install
@@ -45,7 +45,7 @@ remains in Google Groups. Do not advertise subnet routes or an exit node.
 
 The shipped policy permits only the listed TCP flows. Tag owners are empty; tags are assigned
 by administrator-issued keys. Cluster nodes cannot contact one another. Scheduler/API ports
-are 443; the gateway SSH/BBCP ports are reserved for the transfer implementation. Keep its
+are 443; the gateway SSH/SFTP ports are reserved for the transfer implementation. Keep its
 configured data range and the ACL consistent when that implementation is deployed.
 
 Obtain public HTTPS certificates for the scheduler and coordinator. Obtain the private agent

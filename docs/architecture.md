@@ -120,7 +120,7 @@ manifest against the owned JobSpec, and freezes the assignment before sending JO
 PostgreSQL records the delivery scope and deadline. The Mac creates a protected per-transfer
 SSH identity and returns only its public key. The gateway grants read access to the immutable
 upload, restricted to that key and the Mac's Headscale addresses. JOB_FETCH tells the Mac to
-initiate BBCP; the scheduler executes no SSH command. A bounded concurrent command dispatcher
+initiate rclone/SFTP; the scheduler executes no SSH command. A bounded concurrent command dispatcher
 keeps heartbeats and cancellation responsive during payload IO.
 
 The Mac downloads to a temporary file, verifies SHA and size, fsyncs, and atomically publishes
@@ -140,7 +140,7 @@ Public download requests authenticate the job owner or operator/admin, freeze an
 artifact manifest, and save an owner-bound read identity in PostgreSQL. Identical concurrent
 requests reuse it. The scheduler issues ARTIFACT_PREPARE to the assigned Mac; the Mac verifies
 local files and durably binds an export identity before ACK. ARTIFACT_PUBLISH initiates private
-BBCP upload under a source-IP-restricted scope. An accepted upload ACK is followed by gateway
+rclone/SFTP upload under a source-IP-restricted scope. An accepted upload ACK is followed by gateway
 SHA verification and sealing. READY exports grant public reads to a distinct user-generated key.
 Neither private key nor a gateway control secret enters job metadata or agent snapshots.
 
@@ -151,7 +151,7 @@ credentials, cancel/reap active Mac uploads before removal, and trigger durable 
 Gateway senders recheck permission and source retention between chunks. Late registration cleanup
 continues until its issued credentials expire.
 
-The user saves a protected download receipt before requesting a scope. BBCP reads from fixed
+The user saves a protected download receipt before requesting a scope. rclone/SFTP reads from fixed
 gateway paths to a temporary local file. Independent SHA/size checks and fsync precede publication;
 an atomic no-clobber link protects unrelated files. Repeat requests reuse verified local content.
 
@@ -171,7 +171,7 @@ retention are checked before every cached response.
 
 The client advances offsets after yielding verified bytes and resumes across temporary transport
 failures. State following replays durable transitions and reads authoritative job metadata before
-deciding to stop. Full retained artifact retrieval continues through BBCP; short live log chunks
+deciding to stop. Full retained artifact retrieval continues through rclone/SFTP; short live log chunks
 use authenticated WSS/HTTPS. See [live monitoring](live-logs.md) and the requirement ledger.
 
 ## Notification consumers

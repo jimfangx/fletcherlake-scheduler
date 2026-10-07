@@ -2,6 +2,7 @@
 
 import ipaddress
 import re
+from collections.abc import Mapping
 from typing import Literal
 from uuid import UUID
 
@@ -18,8 +19,19 @@ class TransferEndpoint(Schema):
     port: int = Field(default=22, ge=1, le=65535)
     username: str = Field(default="fl-transfer", pattern=r"^[a-z_][a-z0-9_-]{0,31}$")
     host_key: str
-    data_port_first: int = Field(default=5000, ge=1024, le=65535)
-    data_port_last: int = Field(default=5099, ge=1024, le=65535)
+
+    @model_validator(mode="before")
+    @classmethod
+    def remove_legacy_ports(cls, value: object) -> object:
+        # Old endpoint files may still carry BBCP's separate socket range. SFTP
+        # uses only the pinned SSH port, and never opens these legacy ports.
+        if isinstance(value, Mapping):
+            return {
+                key: item
+                for key, item in value.items()
+                if key not in {"data_port_first", "data_port_last"}
+            }
+        return value
 
     @field_validator("host")
     @classmethod
@@ -39,12 +51,6 @@ class TransferEndpoint(Schema):
     @classmethod
     def valid_key(cls, value: str) -> str:
         return public_key(value)
-
-    @model_validator(mode="after")
-    def port_range(self) -> "TransferEndpoint":
-        if self.data_port_last < self.data_port_first + 7:
-            raise ValueError("BBCP needs a range of at least eight data ports")
-        return self
 
 
 class TransferGrant(Schema):

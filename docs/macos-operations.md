@@ -8,12 +8,13 @@ The current Mac tool setup uses Vivado Lab and does not require BWRC license for
 Leave `license_relay` omitted or `null` in the Linux deployment inventory. Tools that later
 need a network license can opt into the [license relay](license-relay.md) independently.
 
-Install BBCP before accepting remote collateral. See [the pinned source build](transfer-gateway.md)
-for native Mac build prerequisites. Put the binary in a stable location and set
-`environment.bbcp.path` in the cluster overrides if it is outside the daemon's PATH. Detection
-records the installed executable when available; launchd includes `/opt/homebrew/bin` and
-`/usr/local/bin` in PATH. This remains a Mac deployment requirement; Linux tests use an explicitly
-supplied BBCP binary.
+Install rclone and OpenSSH before accepting remote collateral. See the
+[checksum-pinned installation](transfer-gateway.md#installation-and-acceptance) for Linux and
+native Apple Silicon/Intel Mac binaries. Put the binary in a stable location and set
+`environment.rclone.path` in the cluster overrides if it is outside the daemon's PATH.
+Detection records the installed executable when available; launchd includes `/opt/homebrew/bin`
+and `/usr/local/bin` in PATH. Native Mac transfer acceptance remains a deployment gate;
+Linux tests use an explicitly supplied rclone binary.
 
 ```sh
 pixi run fl cluster setup init /path/to/cluster-overrides.yaml --scheduler https://scheduler.example.edu

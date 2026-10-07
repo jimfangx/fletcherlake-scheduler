@@ -126,8 +126,8 @@ class AgentService:
                 self.db,
                 self.store,
                 lambda: self._accepting and config_confirmed(self.state_root),
-                executable=self.config.environment.bbcp.path
-                if self.config.environment.bbcp
+                executable=self.config.environment.rclone.path
+                if self.config.environment.rclone
                 else None,
             )
             self.exports = AgentExports(self.db, self.store, self.transfers.executable)
