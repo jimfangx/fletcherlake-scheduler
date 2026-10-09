@@ -1292,19 +1292,124 @@ for name in ('gateway-control-secret', 'postgres-password'):
         path.write_text(secrets.token_hex(32) + '\n')
         path.chmod(0o600)
 PY
-flssh scheduler 'cd /opt/fl && sudo pixi run python -c \
-  "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"' \
-  > "$FL_STATE/enrollment-encryption-key"
+if [ ! -e "$FL_STATE/enrollment-encryption-key" ]; then
+  flssh scheduler 'cd /opt/fl && sudo pixi run python -c \
+    "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"' \
+    > "$FL_STATE/enrollment-encryption-key"
+fi
 ```
 
-Protect and back up the enrollment key; reusing the deployment requires preserving it.
-API key expiration is 30 days here, so schedule rotation before that deadline. Native Mac
-enrollment issues its own distinct node keys later.
+Protect and back up `enrollment-encryption-key` (`FL_ENROLLMENT_ENCRYPTION_KEY`): it encrypts
+saved enrollment credentials in the scheduler database and must be preserved when restoring
+that database. The separate `headscale-api-key` expires after 30 days here; use
+[the rotation procedure](#rotating-the-schedulers-headscale-api-key) below before that deadline.
+Native Mac enrollment issues each Mac its own short-lived join key and persistent node identity.
 
 The coordinator stays on loopback behind nginx, uses tagged nonreusable infrastructure keys,
 and publishes only the configured private names/ACLs. Its embedded DERP server is disabled;
 external DERP provides fallback. No subnet or exit routes are advertised. Preserve the SQLite
 database and Noise key together. See [Headscale operations](headscale-operations.md).
+
+### Rotating the scheduler's Headscale API key
+
+For an existing deployment with section 9 completed, rotate before the 30-day deadline.
+The same procedure recovers an already expired API key: the administrative Headscale CLI
+uses the coordinator's local Unix socket. The scheduler's enrollment encryption key
+(`FL_ENROLLMENT_ENCRYPTION_KEY`) is a separate persistent secret and stays unchanged.
+Macs keep their existing node identities; they do not need to enroll again. Restarting the
+scheduler briefly disconnects its dashboard/API and agent WebSockets; agents reconnect.
+
+**AWS or GCP operator commands:** reload the settings, resource state and helpers from
+section 1 if using a new shell. First list the existing API keys and identify the previous
+scheduler key by its ID/prefix and creation time. Keep that ID for the final revocation step.
+
+```sh
+flssh scheduler 'sudo -u headscale headscale --config /etc/headscale/config.yaml apikeys list'
+export FL_OLD_HEADSCALE_API_KEY_ID=REPLACE_WITH_PREVIOUS_SCHEDULER_KEY_ID
+```
+
+Create and stage a new 30-day key. The secret goes directly into protected files:
+
+```sh
+set -euo pipefail
+umask 077
+[[ "$FL_OLD_HEADSCALE_API_KEY_ID" =~ ^[1-9][0-9]*$ ]]
+flssh scheduler 'sudo -u headscale headscale --config /etc/headscale/config.yaml \
+  apikeys create --expiration 720h --output json' \
+  | jq -er 'select(type == "string" and length > 0)' > "$FL_STATE/headscale-api-key.next"
+chmod 600 "$FL_STATE/headscale-api-key.next"
+flput scheduler "$FL_STATE/headscale-api-key.next" fl-secrets/headscale-api-key.next
+flssh scheduler 'bash -se' <<'HOST'
+set -o pipefail
+chmod 600 "$HOME/fl-secrets/headscale-api-key.next"
+# Verify the replacement against the private API before modifying the running service.
+python3 - "$HOME/fl-secrets/headscale-api-key.next" <<'PY'
+import sys
+from pathlib import Path
+from urllib.request import Request, urlopen
+key = Path(sys.argv[1]).read_text().strip()
+assert key and not any(c.isspace() for c in key)
+request = Request('http://127.0.0.1:8081/api/v1/node',
+                  headers={'Authorization': 'Bearer ' + key})
+with urlopen(request, timeout=15) as response:
+    assert response.status == 200
+print('Replacement Headscale API key accepted')
+PY
+# Replace only the API-key setting, preserving every other scheduler setting.
+sudo python3 - "$HOME/fl-secrets/headscale-api-key.next" <<'PY'
+import os
+import stat
+import sys
+import tempfile
+from pathlib import Path
+key = Path(sys.argv[1]).read_text().strip()
+assert key and not any(c.isspace() for c in key) and '\0' not in key
+path = Path('/etc/fl/scheduler.env')
+info = path.lstat()
+assert stat.S_ISREG(info.st_mode) and not info.st_mode & 0o077
+original = path.read_text()
+lines = original.splitlines(keepends=True)
+matches = [i for i, line in enumerate(lines) if line.startswith('FL_HEADSCALE_API_KEY=')]
+assert len(matches) == 1, 'Expected exactly one FL_HEADSCALE_API_KEY setting'
+quoted = '"' + key.replace('\\', '\\\\').replace('"', '\\"') + '"'
+lines[matches[0]] = 'FL_HEADSCALE_API_KEY=' + quoted + '\n'
+def atomic(target, text):
+    fd, name = tempfile.mkstemp(prefix='.scheduler-env-', dir=target.parent)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            os.fchown(stream.fileno(), info.st_uid, info.st_gid)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, target)
+    finally:
+        Path(name).unlink(missing_ok=True)
+atomic(Path('/etc/fl/scheduler.env.before-headscale-rotation'), original)
+atomic(path, ''.join(lines))
+PY
+sudo systemctl restart fl-scheduler
+sudo systemctl is-active --quiet fl-scheduler
+HOST
+curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-all-errors \
+  "https://scheduler.$FL_DOMAIN/healthz"
+```
+
+After the replacement API check and scheduler health check succeed, update the protected
+operator copy and expire the previous key. Review the selected ID so another consumer's
+key is not revoked. If the scheduler fails to start, restore
+`/etc/fl/scheduler.env.before-headscale-rotation` and restart it before revoking a still-valid
+old key; keep the new key available when recovering from an already expired old key.
+
+```sh
+[[ "$FL_OLD_HEADSCALE_API_KEY_ID" =~ ^[1-9][0-9]*$ ]]
+mv "$FL_STATE/headscale-api-key.next" "$FL_STATE/headscale-api-key"
+flssh scheduler "sudo -u headscale headscale --config /etc/headscale/config.yaml \
+  apikeys expire --id $FL_OLD_HEADSCALE_API_KEY_ID"
+flssh scheduler 'rm -f "$HOME/fl-secrets/headscale-api-key.next"'
+```
+
+Set an operator reminder before the next deadline; this repository does not install automatic
+API-key rotation. Source: [Headscale 0.29.4 API-key CLI](https://github.com/juanfont/headscale/blob/v0.29.4/cmd/headscale/cli/api_key.go).
 
 ## 7. Render and install deployment bundles
 

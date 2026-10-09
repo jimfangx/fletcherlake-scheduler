@@ -75,6 +75,9 @@ on the public host address.
 
 Create a Headscale administrative API key on the coordinator, set an explicit expiration,
 and inject it into the scheduler's protected environment file. Rotate it before expiry.
+For protected AWS/GCP commands, see
+[API-key rotation](deployment-guide.md#rotating-the-schedulers-headscale-api-key). The scheduler
+loads the replacement on restart; existing Mac node identities remain enrolled.
 The Mac never receives that credential. Also generate a Fernet key for the scheduler:
 
 ```sh
