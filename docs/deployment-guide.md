@@ -85,6 +85,29 @@ These commands provision billable infrastructure when you run them; this documen
 execute them. Install Google Cloud CLI for Google credential setup on either hosting provider, plus
 AWS CLI v2 for AWS hosting, `jq`, Python 3 and OpenSSH locally.
 
+Before pasting the deployment blocks or sourcing `ship/` scripts, start a dedicated Bash
+shell. Run this command by itself and wait for the Bash prompt:
+
+```sh
+bash --noprofile --norc
+```
+
+Keep that Bash shell open for the deployment. Do not paste `set -euo pipefail` into your
+normal zsh session or source `ship/env-vars.sh` there: `set -u` can break Powerlevel10k
+with an error such as `P9K_GCLOUD_PROJECT_NAME: parameter not set`. The separate Bash
+shell skips startup files and keeps deployment options out of your normal shell.
+If your current zsh session already has this problem, run `unsetopt nounset errexit`
+before starting Bash, or reconnect and start Bash first. Use `exit` to leave the
+deployment shell when finished.
+
+For the extracted scripts, run `source ship/env-vars.sh` and `source ship/helpers.sh`
+from the repository root in that Bash shell, then source each operator step there
+(for example, `source ship/create-gcp-vpcs.sh`). Sourcing keeps helper functions,
+newly allocated IPs and the gateway's updated SSH port available to subsequent steps.
+Scripts marked for a Mac must run on that Mac. `ship/run-gcp.sh` runs the operator
+steps together; invoke it with `bash ship/run-gcp.sh` rather than sourcing it into
+your normal shell. Its cloud creation steps are for a fresh deployment.
+
 Edit the following values once. `FL_CLOUD` selects VM hosting; `FL_DNS_PROVIDER` independently
 selects authoritative DNS and certificate renewal. Keep an existing Cloudflare-managed domain
 on Cloudflare: use `FL_DNS_PROVIDER=cloudflare` and its existing zone ID, without creating a
@@ -96,9 +119,10 @@ from your local checkout. Keep credentials outside the checkout.
 ```sh
 set -euo pipefail
 umask 077
-export FL_STATE="$HOME/.local/state/fl-deploy"
+export FL_STATE="${FL_STATE:-$HOME/.local/state/fl-deploy}"
 mkdir -p "$FL_STATE"
 chmod 700 "$FL_STATE"
+if [ ! -f "$FL_STATE/settings.env" ]; then
 cat > "$FL_STATE/settings.env" <<'ENV'
 export FL_CLOUD=gcp                         # gcp or aws
 export FL_DNS_PROVIDER=cloudflare            # cloudflare, gcp or aws; independent of VM hosting
@@ -108,12 +132,15 @@ export FL_VPC_CIDR=10.80.0.0/16
 export FL_SUBNET_CIDR=10.80.0.0/24
 export FL_SCHEDULER_NIC_IP=10.80.0.10
 export FL_GATEWAY_NIC_IP=10.80.0.11
-export FL_PIXI_VERSION=v0.65.0
+export FL_PIXI_VERSION=v0.81.0
 export FL_ADMIN_CIDR=REPLACE_WITH_YOUR_PUBLIC_IPV4/32
 export FL_REPO_REV=REPLACE_WITH_REVIEWED_FULL_COMMIT
 export FL_DEPLOY_TOKEN=REPLACE_WITH_A_UNIQUE_DEPLOYMENT_NAME
 export FL_GOOGLE_PROJECT=REPLACE_WITH_GOOGLE_PROJECT_ID
 export FL_WORKSPACE_DOMAIN=example.edu
+export FL_GOOGLE_USERS_GROUP=fl-users@example.edu       # Actual Google Group addresses; may use a different domain
+export FL_GOOGLE_OPERATORS_GROUP=fl-operators@example.edu
+export FL_GOOGLE_ADMINS_GROUP=fl-admins@example.edu
 export FL_GCP_PROJECT=REPLACE_WITH_GCP_HOSTING_PROJECT_ID
 export FL_GCP_REGION=us-west2
 export FL_GCP_ZONE=us-west2-a
@@ -123,6 +150,7 @@ export AWS_DEFAULT_REGION=us-west-2
 export FL_AWS_AZ=us-west-2a
 export FL_AWS_ZONE_ID=REPLACE_WITH_EXISTING_ROUTE53_ZONE_ID  # Only for AWS DNS
 ENV
+fi
 "${EDITOR:-vi}" "$FL_STATE/settings.env"
 source "$FL_STATE/settings.env"
 python3 - <<'PYCHECK'
@@ -153,11 +181,16 @@ PYCHECK
 git cat-file -e "$FL_REPO_REV^{commit}"
 export FL_SSH_KEY="$FL_STATE/admin-ed25519"
 test -f "$FL_SSH_KEY" || ssh-keygen -t ed25519 -f "$FL_SSH_KEY"
-export FL_GATEWAY_SSH_PORT=22
+export FL_GATEWAY_SSH_PORT=${FL_GATEWAY_SSH_PORT:-22}
+if [ -f "$FL_STATE/resources.env" ]; then
+  source "$FL_STATE/resources.env"
+fi
 ```
 
 The key-generation prompt can protect your administrator key with a passphrase. Load it in
-your SSH agent when needed. AWS hosting still needs a Google project for login/group access;
+your SSH agent when needed. Existing settings, saved resource identifiers and the generated
+SSH key are reused when you repeat this setup; review the existing settings in the editor.
+AWS hosting still needs a Google project for login/group access;
 the hosting and Google projects may be separate. Select an AWS AZ supporting M7i, or change
 the documented machine choices to available x86-64 equivalents.
 
@@ -813,7 +846,10 @@ and [Directory scopes](https://developers.google.com/workspace/admin/directory/v
 Create groups such as `fl-users@example.edu`, `fl-operators@example.edu`, and
 `fl-admins@example.edu`. Add the initial deployer to the admin group before first login.
 Set `FL_GOOGLE_USERS_GROUP`, `FL_GOOGLE_OPERATORS_GROUP`, and `FL_GOOGLE_ADMINS_GROUP` to their
-actual addresses. The user group is required; the higher-role groups are optional in code,
+actual addresses in `$FL_STATE/settings.env`. Group addresses are independent of the
+Workspace login domain: for example, `FL_WORKSPACE_DOMAIN=berkeley.edu` can be paired with
+`FL_GOOGLE_ADMINS_GROUP=fl-admins@lists.berkeley.edu`. Keep the Workspace domain set to the
+domain of the humans' Google accounts. The user group is required; the higher-role groups are optional in code,
 but an admin group is needed for the normal enrollment UI. Admin/operator membership includes
 lower-role permissions. Set `FL_GOOGLE_WORKSPACE_DOMAIN=example.edu` to restrict login to the
 expected Workspace domain, or omit it for the application's broader supported identity policy.
@@ -823,6 +859,13 @@ membership roles and expiry. The delegated backend uses Directory's
 [`members.hasMember`](https://developers.google.com/workspace/admin/directory/reference/rest/v1/members/hasMember).
 For first deployment, validate your own membership and non-member denial. Membership cache
 expiry is at most 60 seconds; an expired positive result is not reused during provider outages.
+
+After section 9 installs the scheduler credentials, diagnose `AUTH_UNAVAILABLE` from your
+operator Bash shell with `source ship/check-google-groups.sh YOUR_GOOGLE_EMAIL` (from the
+repository root, after loading the deployment helpers). This checks the installed group
+addresses as `fl-scheduler` and reports API status/messages without printing credentials.
+Confirm the configured addresses match your actual Workspace groups and the group-reader
+service account is an Owner of each. Group access is separate from Google Cloud IAM roles.
 
 ## 4. DNS, TLS and firewall configuration
 
@@ -1071,8 +1114,13 @@ Headscale. Independent SHA-256 and declared-size checks gate publication and exe
 reviewed commit, plus non-secret settings and cloud-resource identifiers:
 
 ```sh
-git cat-file -e "$FL_REPO_REV^{commit}"
-git archive --format=tar "$FL_REPO_REV" > "$FL_STATE/source.tar"
+FL_REPO_ROOT=$(git rev-parse --show-toplevel)
+git -C "$FL_REPO_ROOT" cat-file -e "$FL_REPO_REV^{commit}"
+for FL_REQUIRED in pixi.toml pixi.lock pyproject.toml; do
+  git -C "$FL_REPO_ROOT" cat-file -e "$FL_REPO_REV:$FL_REQUIRED"
+done
+# Archive from the repository root even when these commands run from ship/.
+git -C "$FL_REPO_ROOT" archive --format=tar "$FL_REPO_REV" > "$FL_STATE/source.tar"
 flsave
 for FL_ROLE in scheduler gateway; do
   flssh "$FL_ROLE" 'install -d -m 700 ~/fl-secrets'
@@ -1138,6 +1186,12 @@ for FL_DIR in "${FL_DIRS[@]}"; do
 done
 sudo install -d -m 755 /opt/fl /etc/fl
 sudo tar -xf "$HOME/fl-secrets/source.tar" -C /opt/fl --no-same-owner
+for FL_REQUIRED in pixi.toml pixi.lock pyproject.toml; do
+  if ! sudo test -f "/opt/fl/$FL_REQUIRED"; then
+    printf 'Missing /opt/fl/%s: rerun copy-source-to-vms.sh to upload the full repository archive.\n' "$FL_REQUIRED" >&2
+    exit 1
+  fi
+done
 sudo chmod -R a+rX /opt/fl
 curl -fsSL https://pixi.sh/install.sh -o /tmp/fl-pixi-install.sh
 sudo env PIXI_VERSION="$FL_PIXI_VERSION" PIXI_HOME=/opt/pixi PIXI_BIN_DIR=/usr/local/bin \
@@ -1162,7 +1216,12 @@ HOST
 done
 ```
 
-The Pixi binary is pinned to `FL_PIXI_VERSION`; the bootstrap uses the official installer.
+The Pixi binary is pinned to `FL_PIXI_VERSION`; the bootstrap uses the official installer,
+which selects the host architecture. The documented GCP E2 and AWS M7i VMs use the
+`pixi-x86_64-unknown-linux-musl.tar.gz` asset; `pixi-aarch64-unknown-linux-musl.tar.gz`
+is for ARM64 Linux. Apple Silicon Macs use the Darwin ARM64 asset.
+If Pixi reports no manifest in `/opt/fl`, recreate and upload the full source archive with
+the repository-root command above; upgrading Pixi alone does not supply missing source files.
 Record `/usr/local/bin/pixi --version` and retain the installer with your deployment records
 for an exact bootstrap repeat. Application dependencies remain
 locked by the checked-out `pixi.lock`. For a private repository, the archive upload avoids
@@ -1245,13 +1304,24 @@ sudo install -m 644 /opt/fl/services/headscale/headscale.service /etc/systemd/sy
 sudo install -d -m 755 /etc/systemd/system/headscale.service.d
 printf '[Unit]\nRequiresMountsFor=/var/lib/headscale\n' | \
   sudo tee /etc/systemd/system/headscale.service.d/20-data.conf >/dev/null
-sudo headscale --config /etc/headscale/config.yaml configtest
+# configtest creates the key/database; use the same identity as the service.
+# Repair ownership left by an earlier bootstrap that ran configtest as root.
+sudo chown -R headscale:headscale /var/lib/headscale
+sudo -u headscale headscale --config /etc/headscale/config.yaml configtest
 sudo systemctl daemon-reload
-sudo systemctl enable --now headscale
+sudo systemctl enable headscale
+sudo systemctl restart headscale
+if ! curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 http://127.0.0.1:8081/health; then
+  sudo systemctl status headscale --no-pager --full || true
+  sudo journalctl -u headscale -n 80 --no-pager
+  exit 1
+fi
 sudo nginx -t
 sudo systemctl restart nginx
 HOST
-curl --fail "https://headscale.$FL_DOMAIN/health"
+curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 "https://headscale.$FL_DOMAIN/health"
 ```
 
 Issue one short-lived infrastructure key at a time and join immediately. Store keys in
@@ -1462,7 +1532,7 @@ sudo install -m 644 "$FL_BUNDLE/scheduler/scheduler-nginx.conf" /etc/nginx/conf.
 sudo install -m 600 -o fl-scheduler -g fl-scheduler "$FL_BUNDLE/gateway/public-endpoint.json" /etc/fl/public-endpoint.json
 sudo install -m 600 -o fl-scheduler -g fl-scheduler "$FL_BUNDLE/gateway/private-endpoint.json" /etc/fl/private-endpoint.json
 sudo rm -f /etc/nginx/conf.d/fl-bootstrap.conf
-sudo headscale --config /etc/headscale/config.yaml configtest
+sudo -u headscale headscale --config /etc/headscale/config.yaml configtest
 sudo systemctl restart headscale
 sudo -u headscale headscale --config /etc/headscale/config.yaml policy check -f /etc/headscale/policy.json
 sudo nginx -t
@@ -1620,7 +1690,10 @@ sudo apt-get install -y postgresql-17 postgresql-client-17
 sudo systemctl enable --now postgresql
 sudo install -m 600 -o fl-scheduler -g fl-scheduler \
   "$HOME/fl-secrets/google-groups.json" /etc/fl/google-groups.json
-sudo /opt/fl/.pixi/envs/default/bin/python - "$HOME/fl-secrets" "$HOME/fl-bundle" "$FL_WORKSPACE_DOMAIN" <<'PY'
+sudo /opt/fl/.pixi/envs/default/bin/python - "$HOME/fl-secrets" "$HOME/fl-bundle" "$FL_WORKSPACE_DOMAIN" \
+  "${FL_GOOGLE_USERS_GROUP-fl-users@$FL_WORKSPACE_DOMAIN}" \
+  "${FL_GOOGLE_OPERATORS_GROUP-fl-operators@$FL_WORKSPACE_DOMAIN}" \
+  "${FL_GOOGLE_ADMINS_GROUP-fl-admins@$FL_WORKSPACE_DOMAIN}" <<'PY'
 import os
 import re
 import sys
@@ -1638,6 +1711,9 @@ sql_path = Path('/etc/fl/create-database.sql')
 sql_path.write_text(sql)
 sql_path.chmod(0o600)
 domain = sys.argv[3]
+users, operators, admins = sys.argv[4:7] if len(sys.argv) == 7 else (
+    f'fl-users@{domain}', f'fl-operators@{domain}', f'fl-admins@{domain}'
+)
 values = {
     'FL_DATABASE_URL': f'postgresql+psycopg://fl_scheduler:{quote(password, safe="")}@127.0.0.1:5432/fletcherlake',
     'FL_GOOGLE_CLIENT_ID': read('google-client-id'),
@@ -1645,9 +1721,9 @@ values = {
     'FL_GOOGLE_GROUPS_BACKEND': 'cloud_identity',
     'FL_GOOGLE_GROUPS_CREDENTIALS': '/etc/fl/google-groups.json',
     'FL_GOOGLE_WORKSPACE_DOMAIN': domain,
-    'FL_GOOGLE_USERS_GROUP': f'fl-users@{domain}',
-    'FL_GOOGLE_OPERATORS_GROUP': f'fl-operators@{domain}',
-    'FL_GOOGLE_ADMINS_GROUP': f'fl-admins@{domain}',
+    'FL_GOOGLE_USERS_GROUP': users,
+    'FL_GOOGLE_OPERATORS_GROUP': operators,
+    'FL_GOOGLE_ADMINS_GROUP': admins,
     'FL_HEADSCALE_API_KEY': read('headscale-api-key'),
     'FL_ENROLLMENT_ENCRYPTION_KEY': read('enrollment-encryption-key'),
     'FL_TRANSFER_GATEWAY_CONTROL_SECRET': read('gateway-control-secret'),
@@ -1681,13 +1757,21 @@ sudo systemd-analyze verify /etc/systemd/system/fl-scheduler.service
 sudo nginx -t
 sudo systemctl daemon-reload
 sudo systemctl enable --now fl-scheduler
+if ! curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 http://127.0.0.1:8080/healthz; then
+  sudo systemctl status fl-scheduler --no-pager --full || true
+  sudo journalctl -u fl-scheduler -n 80 --no-pager
+  exit 1
+fi
 sudo systemctl reload nginx
 HOST
-curl --fail "https://scheduler.$FL_DOMAIN/healthz"
+curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 "https://scheduler.$FL_DOMAIN/healthz"
 ```
 
-The example uses exactly `fl-users`, `fl-operators`, `fl-admins` in your Workspace domain.
-Change the environment generator if you used other group names. All configured groups must
+The installer uses the group addresses from `settings.env`; if absent, it defaults to
+`fl-users`, `fl-operators`, `fl-admins` in the Workspace domain for older deployments.
+All configured groups must
 be readable by the service-account owner, even if the human administrator belongs to just
 the highest-role group. PostgreSQL stays local; no RDS/Cloud SQL deployment is needed.
 Source: [PostgreSQL Ubuntu repository](https://www.postgresql.org/download/linux/ubuntu/).
@@ -1743,7 +1827,7 @@ by this trusted administrator, install the pinned Pixi and checksum-pinned rclon
 ```sh
 set -euo pipefail
 export FL_DOMAIN=REPLACE_WITH_THE_SAME_DEPLOYED_DOMAIN
-export FL_PIXI_VERSION=v0.65.0
+export FL_PIXI_VERSION=v0.81.0
 xcode-select -p
 sudo install -d -m 755 -o "$(id -un)" /opt/fl
 tar -xf "$HOME/fl-source.tar" -C /opt/fl

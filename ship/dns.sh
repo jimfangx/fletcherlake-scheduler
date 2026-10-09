@@ -1,5 +1,10 @@
-read -r -s -p 'Cloudflare zone-scoped API token: ' FL_INPUT
+IFS= read -r -s -p 'Cloudflare zone-scoped API token: ' FL_INPUT
 printf '\n'
+if [[ -z "$FL_INPUT" || "$FL_INPUT" == *[[:space:]]* ]]; then
+  unset FL_INPUT
+  printf 'Invalid Cloudflare token: paste only the API token value, without spaces or a Bearer prefix. Saved credentials were not changed.\n' >&2
+  return 1 2>/dev/null || exit 1
+fi
 printf 'dns_cloudflare_api_token = %s\n' "$FL_INPUT" > "$FL_STATE/certbot-cloudflare.ini"
 unset FL_INPUT
 chmod 600 "$FL_STATE/certbot-cloudflare.ini"
@@ -16,7 +21,8 @@ from urllib.request import Request, urlopen
 credentials = configparser.ConfigParser(interpolation=None)
 credentials.read_string('[cloudflare]\n' + Path(sys.argv[1]).read_text())
 token = credentials['cloudflare']['dns_cloudflare_api_token'].strip()
-assert token and not any(c.isspace() for c in token)
+if not token or any(c.isspace() for c in token):
+    raise ValueError('Cloudflare token is empty or contains whitespace; paste only the API token value')
 zone_id = os.environ['FL_CF_ZONE_ID']
 assert re.fullmatch('[0-9a-f]{32}', zone_id)
 domain = os.environ['FL_DOMAIN'].lower()

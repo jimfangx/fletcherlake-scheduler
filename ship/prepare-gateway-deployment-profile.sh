@@ -41,7 +41,7 @@ sudo install -m 644 "$FL_BUNDLE/scheduler/scheduler-nginx.conf" /etc/nginx/conf.
 sudo install -m 600 -o fl-scheduler -g fl-scheduler "$FL_BUNDLE/gateway/public-endpoint.json" /etc/fl/public-endpoint.json
 sudo install -m 600 -o fl-scheduler -g fl-scheduler "$FL_BUNDLE/gateway/private-endpoint.json" /etc/fl/private-endpoint.json
 sudo rm -f /etc/nginx/conf.d/fl-bootstrap.conf
-sudo headscale --config /etc/headscale/config.yaml configtest
+sudo -u headscale headscale --config /etc/headscale/config.yaml configtest
 sudo systemctl restart headscale
 sudo -u headscale headscale --config /etc/headscale/config.yaml policy check -f /etc/headscale/policy.json
 sudo nginx -t

@@ -37,10 +37,21 @@ sudo install -m 644 /opt/fl/services/headscale/headscale.service /etc/systemd/sy
 sudo install -d -m 755 /etc/systemd/system/headscale.service.d
 printf '[Unit]\nRequiresMountsFor=/var/lib/headscale\n' | \
   sudo tee /etc/systemd/system/headscale.service.d/20-data.conf >/dev/null
-sudo headscale --config /etc/headscale/config.yaml configtest
+# configtest creates the key/database; use the same identity as the service.
+# Repair ownership left by an earlier bootstrap that ran configtest as root.
+sudo chown -R headscale:headscale /var/lib/headscale
+sudo -u headscale headscale --config /etc/headscale/config.yaml configtest
 sudo systemctl daemon-reload
-sudo systemctl enable --now headscale
+sudo systemctl enable headscale
+sudo systemctl restart headscale
+if ! curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 http://127.0.0.1:8081/health; then
+  sudo systemctl status headscale --no-pager --full || true
+  sudo journalctl -u headscale -n 80 --no-pager
+  exit 1
+fi
 sudo nginx -t
 sudo systemctl restart nginx
 HOST
-curl --fail "https://headscale.$FL_DOMAIN/health"
+curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 "https://headscale.$FL_DOMAIN/health"

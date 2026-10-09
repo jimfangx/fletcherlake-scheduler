@@ -2,7 +2,7 @@ xcode-select --install
 
 set -euo pipefail
 export FL_DOMAIN=REPLACE_WITH_THE_SAME_DEPLOYED_DOMAIN
-export FL_PIXI_VERSION=v0.65.0
+export FL_PIXI_VERSION=v0.81.0
 xcode-select -p
 sudo install -d -m 755 -o "$(id -un)" /opt/fl
 tar -xf "$HOME/fl-source.tar" -C /opt/fl

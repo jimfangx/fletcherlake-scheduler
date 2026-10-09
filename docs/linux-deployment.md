@@ -72,7 +72,7 @@ Validate on each deployment host before loading files:
 nginx -t
 sshd -t -f /etc/fl/transfer-sshd.conf
 haproxy -c -f /PATH/haproxy.cfg
-headscale --config /etc/headscale/config.yaml configtest
+sudo -u headscale headscale --config /etc/headscale/config.yaml configtest
 systemd-analyze verify /etc/systemd/system/fl-scheduler.service
 ```
 

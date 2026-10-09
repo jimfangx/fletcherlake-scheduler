@@ -46,6 +46,12 @@ for FL_DIR in "${FL_DIRS[@]}"; do
 done
 sudo install -d -m 755 /opt/fl /etc/fl
 sudo tar -xf "$HOME/fl-secrets/source.tar" -C /opt/fl --no-same-owner
+for FL_REQUIRED in pixi.toml pixi.lock pyproject.toml; do
+  if ! sudo test -f "/opt/fl/$FL_REQUIRED"; then
+    printf 'Missing /opt/fl/%s: rerun copy-source-to-vms.sh to upload the full repository archive.\n' "$FL_REQUIRED" >&2
+    exit 1
+  fi
+done
 sudo chmod -R a+rX /opt/fl
 curl -fsSL https://pixi.sh/install.sh -o /tmp/fl-pixi-install.sh
 sudo env PIXI_VERSION="$FL_PIXI_VERSION" PIXI_HOME=/opt/pixi PIXI_BIN_DIR=/usr/local/bin \

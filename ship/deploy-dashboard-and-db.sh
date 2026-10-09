@@ -14,7 +14,10 @@ sudo apt-get install -y postgresql-17 postgresql-client-17
 sudo systemctl enable --now postgresql
 sudo install -m 600 -o fl-scheduler -g fl-scheduler \
   "$HOME/fl-secrets/google-groups.json" /etc/fl/google-groups.json
-sudo /opt/fl/.pixi/envs/default/bin/python - "$HOME/fl-secrets" "$HOME/fl-bundle" "$FL_WORKSPACE_DOMAIN" <<'PY'
+sudo /opt/fl/.pixi/envs/default/bin/python - "$HOME/fl-secrets" "$HOME/fl-bundle" "$FL_WORKSPACE_DOMAIN" \
+  "${FL_GOOGLE_USERS_GROUP-fl-users@$FL_WORKSPACE_DOMAIN}" \
+  "${FL_GOOGLE_OPERATORS_GROUP-fl-operators@$FL_WORKSPACE_DOMAIN}" \
+  "${FL_GOOGLE_ADMINS_GROUP-fl-admins@$FL_WORKSPACE_DOMAIN}" <<'PY'
 import os
 import re
 import sys
@@ -32,6 +35,9 @@ sql_path = Path('/etc/fl/create-database.sql')
 sql_path.write_text(sql)
 sql_path.chmod(0o600)
 domain = sys.argv[3]
+users, operators, admins = sys.argv[4:7] if len(sys.argv) == 7 else (
+    f'fl-users@{domain}', f'fl-operators@{domain}', f'fl-admins@{domain}'
+)
 values = {
     'FL_DATABASE_URL': f'postgresql+psycopg://fl_scheduler:{quote(password, safe="")}@127.0.0.1:5432/fletcherlake',
     'FL_GOOGLE_CLIENT_ID': read('google-client-id'),
@@ -39,9 +45,9 @@ values = {
     'FL_GOOGLE_GROUPS_BACKEND': 'cloud_identity',
     'FL_GOOGLE_GROUPS_CREDENTIALS': '/etc/fl/google-groups.json',
     'FL_GOOGLE_WORKSPACE_DOMAIN': domain,
-    'FL_GOOGLE_USERS_GROUP': f'fl-users@{domain}',
-    'FL_GOOGLE_OPERATORS_GROUP': f'fl-operators@{domain}',
-    'FL_GOOGLE_ADMINS_GROUP': f'fl-admins@{domain}',
+    'FL_GOOGLE_USERS_GROUP': users,
+    'FL_GOOGLE_OPERATORS_GROUP': operators,
+    'FL_GOOGLE_ADMINS_GROUP': admins,
     'FL_HEADSCALE_API_KEY': read('headscale-api-key'),
     'FL_ENROLLMENT_ENCRYPTION_KEY': read('enrollment-encryption-key'),
     'FL_TRANSFER_GATEWAY_CONTROL_SECRET': read('gateway-control-secret'),
@@ -75,6 +81,13 @@ sudo systemd-analyze verify /etc/systemd/system/fl-scheduler.service
 sudo nginx -t
 sudo systemctl daemon-reload
 sudo systemctl enable --now fl-scheduler
+if ! curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 http://127.0.0.1:8080/healthz; then
+  sudo systemctl status fl-scheduler --no-pager --full || true
+  sudo journalctl -u fl-scheduler -n 80 --no-pager
+  exit 1
+fi
 sudo systemctl reload nginx
 HOST
-curl --fail "https://scheduler.$FL_DOMAIN/healthz"
+curl --fail --silent --show-error --retry 15 --retry-connrefused \
+  --retry-delay 2 --retry-max-time 60 --max-time 5 "https://scheduler.$FL_DOMAIN/healthz"
