@@ -118,25 +118,37 @@ Unregister failure preserves local recovery data. `scheduler=` records a public 
 origin for legacy credentials. The same archive, independent cleanup, and retry behavior
 described in [permanent retirement](retirement.md) applies to Python callers.
 
-## Firmware adapter contract
+## Lilikoi backend
 
-`firmware_commands` is a mapping from backend operation name to argv arrays. Values in braces
-are substituted within argv items; there is no shell expansion. Paths with spaces remain one
-argument. Available fields are `{bitstream}`, `{elf}`, `{rail}`, `{volts}`, `{channel}`, and
-`{hz}` for their respective operations. Keys from `device_mapping` also supply named device
-placeholders, such as `{uart}`. Literal JSON objects remain literal argument text.
+`backend: lilikoi` drives a Fletcher Lake board through [lilikoi](../packages/lilikoi), the
+hardware team's host tooling vendored as a git submodule (`git submodule update --init`). It
+implements every `fl_agent.hardware.base.BoardBackend` operation: RP2350 power sequencing and
+sensing over USB CDC, bitstream programming through OpenOCD on the board's FT2232H, and SoC
+loading and execution through `uart_tsi` on the UART-TSI port. lilikoi runs one daemon per board
+and the agent talks to it over a unix socket in-process; nothing is configured by argv template.
 
-Implement operations from `fl_agent.hardware.base.BoardBackend`. `discover` emits a JSON
-string mapping; sensor reads emit a numeric value; `read_uart` emits bytes; `wait_for_completion`
-emits a JSON `RunResult` (at least `passed` and optionally `exit_code` and `detail`). Other
-operations report success by exit status. `power_on` must preserve already powered FPGA state;
-`power_off` resets the physical platform. `stop` must safely stop execution and be idempotent.
+`device_mapping` carries the board identity and tool locations:
 
-Each firmware command has a deadline, configured with `firmware_timeout_seconds` on its board
-(default 60 seconds); the job's own deadline covers preparation and execution.
-A firmware completion command that requires a long wait needs an appropriately configured
-adapter command deadline. The supplied firmware syntax is still unknown, so production command
-mappings must be supplied and tested by the hardware team.
+| key | meaning |
+|---|---|
+| `mcu` | RP2350 USB serial number or device path (required) |
+| `run_dir` | daemon socket, lock and logs (default `~/.lilikoi/run` of the agent user) |
+| `tsi_tty` | serial device of the FPGA's UART-TSI port |
+| `uart_tsi`, `openocd` | tool paths when not on PATH |
+| `openocd_cfg`, `jtag_serial` | adapter/tap config and the JTAG cable serial |
+| `rail_limits` | per-rail `MIN-MAX` millivolts, e.g. `650-900,650-900,650-900`; required for `set_voltage` |
+| `core_sel` | `own` or `shared` per VCORE1,VCORE2: which regulator feeds each |
+| `tsi_baud`, `openocd_timeout`, `fpga_done_timeout`, `selfcheck` | tuning, rarely needed |
+
+Unknown keys are rejected at agent start. `examples/cluster-lilikoi.yaml` is a complete slot
+for the first board. `power_on` raises the rail enables and preserves FPGA state; `power_off`
+restores boot setpoints and drops every enable; `stop` kills `uart_tsi` and pulses chip reset,
+and is idempotent. `wait_for_completion` reports `passed` when `uart_tsi` exits 0.
+
+Each operation has a deadline, `firmware_timeout_seconds` on its board (default 60 seconds);
+`wait_for_completion` shares it, so set it to at least the longest run. The job's own deadline
+covers preparation and execution. Cancelling an operation closes the socket; the daemon finishes
+it on its own, and the agent's cleanup (`stop`, `power_off`) settles the board.
 
 ## Recovery
 

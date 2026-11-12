@@ -22,8 +22,7 @@ NUMBERS = (
 YAML_FIELDS: tuple[tuple[str, str, object], ...] = (
     ("fpgas", "FPGAs: list of model/device mappings", []),
     ("socs", "SoCs: list of name/device mappings", []),
-    ("device_mapping", "Device mapping: names to device paths", {}),
-    ("firmware_commands", "Firmware operations: names to argv lists", {}),
+    ("device_mapping", "Device mapping: lilikoi board identity and tool paths", {}),
 )
 
 
@@ -44,7 +43,7 @@ class BoardEditor(ModalScreen[BoardConfig | None]):
                 with TabPane("Devices & firmware"):
                     with VerticalScroll():
                         yield Static(
-                            "Use standard YAML. Firmware commands are argv lists, without a shell."
+                            "Use standard YAML. A lilikoi board needs at least mcu (RP2350 serial)."
                         )
                         for key, label, default_yaml in YAML_FIELDS:
                             yield Label(label)
