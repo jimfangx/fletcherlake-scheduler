@@ -1,0 +1,26 @@
+# Cluster overrides for one real Fletcher Lake board driven by lilikoi (packages/lilikoi).
+# Pass this to `fl cluster setup init`; host facts are autodetected. Paths assume the
+# checkout at /opt/fl with uart_tsi built (`make -C /opt/fl/packages/lilikoi/host/uart_tsi`)
+# and openocd on PATH (brew install open-ocd). rail_limits and the SoC name come from the
+# chip owners; the values below are the bench defaults.
+boards:
+  - board_id: fletcherlake-0
+    backend: lilikoi
+    device_mapping:
+      mcu: CED352E2D2D85AFF                       # RP2350 USB serial number
+      tsi_tty: /dev/cu.usbserial-FL810398FE310    # FT2232H channel A (UART-TSI)
+      jtag_serial: FL810398FE31                   # FT2232H channel B (JTAG), for openocd
+      openocd_cfg: /opt/fl/packages/lilikoi/host/openocd/fletcherlake.cfg
+      uart_tsi: /opt/fl/packages/lilikoi/host/uart_tsi/uart_tsi
+      rail_limits: 650-900,650-900,650-900        # mV per VCORE rail; refuses set_voltage outside
+      core_sel: shared,shared                     # VCORE1/VCORE2 fed from PMIC0 (board default)
+      run_dir: "/Library/Application Support/fl/lilikoi"
+    num_vrails: 3
+    num_vsense: 8
+    num_isense: 4
+    clock_source: fpga
+    fpgas: [{model: xc7k160t}]
+    socs: [{name: dsp25}]
+    firmware_timeout_seconds: 7200   # also bounds wait_for_completion: >= the longest run
+  - null
+  - null

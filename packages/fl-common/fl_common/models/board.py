@@ -29,6 +29,5 @@ class BoardConfig(Schema):
     fpgas: list[FPGAConfig] = Field(default_factory=list)
     socs: list[SoCConfig] = Field(default_factory=list)
     backend: Literal["mock", "lilikoi"]
-    # Firmware argv templates belong to trusted cluster configuration, never to JobConfig.
-    firmware_commands: dict[str, list[str]] = Field(default_factory=dict)
+    # Deadline for one lilikoi operation; wait_for_completion spans a whole SoC run.
     firmware_timeout_seconds: int = Field(default=60, gt=0, le=35 * 86400)

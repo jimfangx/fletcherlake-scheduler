@@ -38,9 +38,8 @@ async def test_edit_boards_host_tools_and_power_without_mutating_source(config, 
         board.query_one("#num_vrails", Input).value = "2"
         board.query_one("#fpgas", TextArea).load_text("- model: VU9P\n  device: fpga0")
         board.query_one("#socs", TextArea).load_text("- name: chipB\n  device: soc0")
-        board.query_one("#device_mapping", TextArea).load_text("uart: /dev/cu.board")
-        board.query_one("#firmware_commands", TextArea).load_text(
-            "stop: ['/opt/firmware tool', 'stop', '{uart}']"
+        board.query_one("#device_mapping", TextArea).load_text(
+            "mcu: CED352E2D2D85AFF\ntsi_tty: /dev/cu.board"
         )
         await pilot.pause(0.25)  # Textual suppresses clicks during its button press animation.
         await pilot.click("#save-board")
@@ -63,7 +62,7 @@ async def test_edit_boards_host_tools_and_power_without_mutating_source(config, 
         await pilot.press("ctrl+s")
     result = app.return_value
     assert result.apple_model == "Macmini10,1" and result.boards[2].num_vrails == 2
-    assert result.boards[2].firmware_commands["stop"][0] == "/opt/firmware tool"
+    assert result.boards[2].device_mapping["tsi_tty"] == "/dev/cu.board"
     assert result.environment.vivado.edition == "lab" and result.power_control.alias == "Lab Mac"
     assert initial == original
 

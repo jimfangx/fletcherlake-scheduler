@@ -151,11 +151,7 @@ class AgentService:
     @staticmethod
     def _make_backend(board: BoardConfig) -> BoardBackend:
         if board.backend == "lilikoi":
-            return LilikoiBoardBackend(
-                board.firmware_commands,
-                board.firmware_timeout_seconds,
-                board.device_mapping,
-            )
+            return LilikoiBoardBackend(board.device_mapping, board.firmware_timeout_seconds)
         return MockBoardBackend()
 
     def _repair_retention(self) -> None:

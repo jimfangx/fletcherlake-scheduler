@@ -1111,7 +1111,8 @@ Headscale. Independent SHA-256 and declared-size checks gate publication and exe
 
 **AWS or GCP operator commands:** the `flssh`/`flput` helpers choose `ssh`/`scp` or
 `gcloud compute ssh`/`scp`. Run from your repository checkout. Upload an archive of the
-reviewed commit, plus non-secret settings and cloud-resource identifiers:
+reviewed commit, plus non-secret settings and cloud-resource identifiers. `git archive` omits
+submodules, so the lilikoi submodule is archived at the commit the reviewed revision pins:
 
 ```sh
 FL_REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -1119,8 +1120,13 @@ git -C "$FL_REPO_ROOT" cat-file -e "$FL_REPO_REV^{commit}"
 for FL_REQUIRED in pixi.toml pixi.lock pyproject.toml; do
   git -C "$FL_REPO_ROOT" cat-file -e "$FL_REPO_REV:$FL_REQUIRED"
 done
+git -C "$FL_REPO_ROOT" submodule update --init packages/lilikoi
+rm -rf "$FL_STATE/source" && mkdir "$FL_STATE/source"
 # Archive from the repository root even when these commands run from ship/.
-git -C "$FL_REPO_ROOT" archive --format=tar "$FL_REPO_REV" > "$FL_STATE/source.tar"
+git -C "$FL_REPO_ROOT" archive --format=tar "$FL_REPO_REV" | tar -x -C "$FL_STATE/source"
+git -C "$FL_REPO_ROOT/packages/lilikoi" archive --format=tar --prefix=packages/lilikoi/ \
+  "$(git -C "$FL_REPO_ROOT" rev-parse "$FL_REPO_REV:packages/lilikoi")" | tar -x -C "$FL_STATE/source"
+tar -cf "$FL_STATE/source.tar" -C "$FL_STATE/source" .
 flsave
 for FL_ROLE in scheduler gateway; do
   flssh "$FL_ROLE" 'install -d -m 700 ~/fl-secrets'
@@ -1857,13 +1863,14 @@ its board/JTAG access; this repository does not install a Mac-native Vivado pack
 Autodetection searches `vivado`; set `environment.vivado.path` and `edition: lab` explicitly
 when using `vivado_lab` or a wrapper. Inventory tool metadata alone does not execute hardware.
 
-Create a cluster override YAML with one to three explicit board slots. Start from the shape in
-`examples/cluster.yaml`, replacing simulated boards with `backend: lilikoi`, actual device
-mappings and supplied `firmware_commands`. There are no guessed firmware command names.
-Before running production jobs, validate power on/off, FPGA programming, SoC loading, start,
-stop, UART, completion and any requested voltage/frequency/sensor operations. Commands are
-argv arrays with deadlines; completion emits a JSON `RunResult`. Full contract:
-[Mac operations](macos-operations.md#firmware-adapter-contract).
+Create a cluster override YAML with one to three explicit board slots. Start from
+`examples/cluster-lilikoi.yaml`: `backend: lilikoi` with the board's `device_mapping` (RP2350
+serial, UART-TSI tty, JTAG serial, tool paths). lilikoi is the `packages/lilikoi` submodule;
+build its `uart_tsi` (`make -C /opt/fl/packages/lilikoi/host/uart_tsi`) and install OpenOCD
+(`brew install open-ocd`) on the Mac. Before running production jobs, validate power on/off,
+FPGA programming, SoC loading, start, stop, UART, completion and any requested
+voltage/frequency/sensor operations. Full contract:
+[Mac operations](macos-operations.md#lilikoi-backend).
 
 In the scheduler dashboard, issue a short-lived ticket from `/admin/clusters`. On the Mac:
 
