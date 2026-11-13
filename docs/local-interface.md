@@ -9,6 +9,25 @@ pixi run fl cluster status
 pixi run fl cluster status --dashboard
 ```
 
+To try the TUI on Linux without a Mac, start a populated mock agent from the repository root:
+
+```sh
+pixi run python examples/run_tui_demo.py
+```
+
+Then, in another terminal on the same machine and from the repository root:
+
+```sh
+FL_AGENT_SOCKET=/tmp/fl-tui-populated/run/agent.sock pixi run fl cluster status --dashboard
+```
+
+The demo includes two successful jobs, one failed job, two ten-minute running jobs and six
+queued jobs with different priorities. Its artifact rows show actual mock input files, UART
+logs and result files, including different completion-based retention periods. It requires
+no Google login or scheduler connection. Stop it with Ctrl-C in the agent terminal. Each run
+requires a fresh state directory: use `--state-root /tmp/fl-tui-populated-2` if the default
+already exists, then use the matching socket command printed by the demo.
+
 Plain status retains its JSON output for scripts. The Textual dashboard has five tabs:
 
 | Tab | Contents |

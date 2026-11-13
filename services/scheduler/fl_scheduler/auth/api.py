@@ -166,22 +166,198 @@ class AuthAPI:
             return TERMINAL_PAGE
 
 
-TERMINAL_PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
+TERMINAL_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fletcherlake terminal login</title><main>
-<h1>Approve your terminal</h1><p>
-<a href="/api/auth/login?return_to=/api/auth/terminal/verify">Sign in with Google</a>,
-then enter the code displayed by fl-client on your own terminal.</p>
-<form id="approval"><label>Terminal code <input name="user_code" required maxlength="32"
-autocomplete="off"></label><button>Approve terminal</button></form><p id="result" role="status"></p>
-</main><script>
-document.getElementById('approval').addEventListener('submit', async event => {
+<title>Approve your terminal · Fletcherlake</title>
+<style>
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: #18343d;
+  background: #f4f6f4;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; min-height: 100dvh; }
+main {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+}
+.card {
+  width: 100%;
+  max-width: 480px;
+  padding: clamp(24px, 6vw, 40px);
+  background: #fff;
+  border: 1px solid #dce5e0;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgb(21 45 53 / 6%);
+}
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 650; }
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  color: #d6eae5;
+  background: #23454c;
+  border: 1px solid #75aba5;
+  font-weight: 700;
+}
+.eyebrow {
+  margin: 32px 0 8px;
+  color: #677f82;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+h1 { margin: 0 0 12px; font-size: clamp(1.6rem, 6vw, 2rem); letter-spacing: -0.03em; }
+p { margin: 0; line-height: 1.6; }
+.description, .hint, .footer { color: #597176; }
+.sign-in { margin: 24px 0; }
+button, input, .button { font: inherit; }
+button, .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 16px;
+  border: 1px solid #bccbc7;
+  border-radius: 7px;
+  background: #fff;
+  color: #18343d;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.button:hover { background: #e9f0ed; }
+button { margin-top: 18px; background: #176f70; border-color: #176f70; color: #fff; }
+button:hover { background: #0d5657; }
+button:disabled { opacity: 0.65; cursor: default; }
+:focus-visible { outline: 3px solid #9acac5; outline-offset: 3px; }
+label { display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600; }
+input {
+  width: 100%;
+  min-width: 0;
+  padding: 14px 12px;
+  border: 1px solid #bccbc7;
+  border-radius: 7px;
+  color: #18343d;
+  background: #fff;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+input:disabled { background: #f4f6f4; }
+.hint { margin-top: 8px; font-size: 0.8rem; }
+code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+#result { font-size: 0.9rem; overflow-wrap: anywhere; }
+#result:not(:empty) { margin-top: 20px; padding: 12px 14px; border-radius: 7px; }
+#result[data-state="pending"] { background: #f0f4f2; color: #597176; }
+#result[data-state="success"] { background: #e9f4ee; color: #245e42; }
+#result[data-state="error"] { background: #fff0ec; color: #963c2f; }
+.footer { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e4ebe7; font-size: 0.8rem; }
+.footer a { color: #126d70; text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+noscript p { margin-top: 16px; color: #963c2f; }
+</style>
+</head>
+<body>
+<main>
+<section class="card" aria-labelledby="page-title">
+<div class="brand"><span class="brand-mark" aria-hidden="true">FL</span>Fletcherlake</div>
+<p class="eyebrow">Terminal access</p>
+<h1 id="page-title">Approve your terminal</h1>
+<p class="description">Sign in with Google, then enter the code shown by
+<code>fl-client</code> on your terminal.</p>
+<div class="sign-in">
+<a class="button" href="/api/auth/login?return_to=/api/auth/terminal/verify">
+Sign in with Google</a>
+<p class="hint">Already signed in? Enter your code below.</p>
+</div>
+<form id="approval" method="post" action="/api/auth/terminal/approve">
+<label for="user-code">Terminal code</label>
+<input id="user-code" name="user_code" required maxlength="32" placeholder="XXXXXXX-XXXXXXX"
+  autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="code-hint">
+<p class="hint" id="code-hint">Codes expire after 10 minutes.
+Only approve a code from your own terminal.</p>
+<button id="approve-button" type="submit">Approve terminal</button>
+</form>
+<p id="result" role="status" aria-live="polite" aria-atomic="true"></p>
+<noscript><p>Enable JavaScript to approve your terminal.</p></noscript>
+<p class="footer">After approval, return to your terminal to continue.<br>
+<a href="/">Back to dashboard</a></p>
+</section>
+</main>
+<script>
+const form = document.getElementById('approval');
+const input = document.getElementById('user-code');
+const button = document.getElementById('approve-button');
+const result = document.getElementById('result');
+
+function showResult(state, message) {
+  result.dataset.state = state;
+  result.textContent = message;
+}
+
+form.addEventListener('submit', async event => {
   event.preventDefault();
-  const response = await fetch('/api/auth/terminal/approve', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({user_code: new FormData(event.target).get('user_code')})
-  });
-  document.getElementById('result').textContent = response.ok ?
-    'Terminal approved. Return to fl-client.' : 'Approval failed. Sign in and check your code.';
+  if (button.disabled) return;
+  const code = input.value.trim().toUpperCase();
+  if (!code) {
+    input.value = '';
+    input.reportValidity();
+    return;
+  }
+  input.value = code;
+  button.disabled = true;
+  button.textContent = 'Approving…';
+  form.setAttribute('aria-busy', 'true');
+  showResult('pending', 'Approving your terminal…');
+  let approved = false;
+  try {
+    const response = await fetch('/api/auth/terminal/approve', {
+      method: 'POST', credentials: 'same-origin', redirect: 'error',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_code: code})
+    });
+    if (response.ok) {
+      approved = true;
+      input.disabled = true;
+      showResult('success', 'Terminal approved. Return to fl-client to continue.');
+    } else {
+      const error = await response.json().catch(() => ({}));
+      let message = 'Approval failed. Check your code and try again.';
+      if (response.status === 401) {
+        message = 'Sign in with Google above, then enter your terminal code again.';
+      } else if (response.status === 403) {
+        message = 'Your account is not authorized. Use an account in a Fletcherlake group.';
+      } else if (error.code === 'LOGIN_EXPIRED') {
+        message = 'This code expired or was already used. Start a new login in fl-client.';
+      } else if (response.status === 429) {
+        message = 'Too many attempts. Wait a moment before trying again.';
+      } else if (response.status >= 500) {
+        message = 'Sign-in is temporarily unavailable. Please try again shortly.';
+      }
+      showResult('error', message);
+    }
+  } catch {
+    showResult('error', 'Could not reach the scheduler. Check your connection and try again.');
+  } finally {
+    form.removeAttribute('aria-busy');
+    button.disabled = approved;
+    button.textContent = approved ? 'Terminal approved' : 'Approve terminal';
+  }
 });
-</script></html>"""
+</script>
+</body>
+</html>"""

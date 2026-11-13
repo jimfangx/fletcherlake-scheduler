@@ -83,6 +83,26 @@ Paths in `job.yaml` are resolved relative to that file. The example expects file
 not execute the ELF, but exercise programming, execution, results, UART, and retention paths.
 Every board must explicitly declare `backend: mock` or `backend: lilikoi`.
 
+For a populated TUI demo, run this from the repository root instead of starting the empty agent:
+
+```sh
+pixi run python examples/run_tui_demo.py
+```
+
+In another terminal, from the repository root:
+
+```sh
+FL_AGENT_SOCKET=/tmp/fl-tui-populated/run/agent.sock pixi run fl cluster status --dashboard
+```
+
+This seeds two successful jobs, one failed job, two running jobs and six queued jobs with
+different priorities. Completed jobs have retained mock inputs, UART logs and results, with
+one-, seven- and thirty-day retention. Running jobs take ten minutes, then their queues advance.
+Press `q` to leave the TUI and Ctrl-C in the agent terminal to stop the demo. The demo uses a
+separate local state directory and does not enroll with the deployed scheduler. An existing
+directory is never overwritten; use `--state-root /tmp/fl-tui-populated-2` for another fresh run
+and use the matching socket command printed by the demo.
+
 The local Python API calls the same daemon directly:
 
 ```python
