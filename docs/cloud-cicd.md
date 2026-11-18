@@ -49,7 +49,8 @@ In [the repository settings](https://github.com/jimfangx/fletcherlake-scheduler/
    the repository does not need broadly writable workflow-token defaults.
 5. Commit and push the reviewed application, lockfile and CI/CD changes together to `main`.
    Watch **Actions → checks**. The `Deploy scheduler and gateway` job starts only after
-   all three platform check jobs pass. Future passing pushes to `main` deploy automatically.
+   all three platform jobs and all three transport/network acceptance jobs pass. Passing pushes
+   to `main` deploy automatically.
 
 If you prefer CLI setup instead of those GitHub UI steps, authenticate `gh` as a repository
 administrator and run `python3 ship/cloud/bootstrap.py` without `--manual-github`.
@@ -87,17 +88,25 @@ Bootstrap configures access; the workflow becomes active when its files reach `m
 
 ## Each deployment
 
-1. Linux runs the full regression suite, including an 81-job nine-board workload, and
-   builds/tests the web dashboard. Both Mac architectures run unit checks plus agent,
+1. Linux runs regression/browser checks and an 81-job nine-board workload. Real
+   SFTP and Headscale/Tailscale tests run concurrently in three additional Linux jobs:
+   public SFTP, normal peer paths and forced DERP relay paths. Collection classifies tests
+   by their real-network fixtures and peer parameters, so the four Linux groups cover all
+   tests. All six CI jobs gate deployment. Both Mac architectures run unit checks plus agent,
    local dashboard/editor, enrollment, retirement, agent crash/recovery and WebSocket
    compatibility tests.
    The 315-job workload and real long partitions run in the manual `long acceptance`
-   workflow. Submodule checkout includes lilikoi without its nested firmware SDKs.
+   workflow. Linux runners use Ubuntu 24.04, matching production, and Playwright uses their
+   preinstalled Google Chrome through the `chrome` channel. This avoids downloading a
+   browser and installing its OS packages on every run; local Chromium acceptance remains
+   supported when no channel is selected. The compiled HAProxy test validator is cached
+   by build-script checksum. Submodule checkout excludes nested firmware SDKs.
    Linux packages the exact checked commit plus pinned lilikoi source and built
    dashboard into one artifact. Untracked files, Git metadata, environments and the Pico SDK
    are excluded. The same artifact is used for both cloud VMs.
 2. A serialized production job skips superseded main commits. It authenticates through
-   OIDC, uploads through pinned SSH over IAP, verifies the archive checksum, and installs
+   OIDC, validates both pinned host-key entries and SSH/sudo access, then uploads through
+   SSH over IAP, verifies the archive checksum, and installs
    the locked Python environment into a new `/opt/fl-releases/<sha>-<run>-<attempt>` on
    each VM while the current services are running.
 3. After both releases prepare successfully, it stops the scheduler and gateway/transfer
@@ -115,6 +124,15 @@ Only one deployment runs at a time, and newer pushes do not cancel an in-progres
 Operators can still cancel a job manually, so inspect both hosts after a manual cancellation.
 
 ## Failures and recovery
+
+If SSH reports no known key for `fl-gateway-ci`, check the production environment variable
+`FL_DEPLOY_KNOWN_HOSTS`. It must include both generated host entries. Raw newlines and
+JSON-escaped newlines are accepted by the deployment helper and normalized before checking
+both aliases. Pinned-key verification is enforced on both connections before preparation.
+For a missing/truncated value, replace it with the raw contents of
+`~/.local/state/fl-deploy/github-deploy-known-hosts` and rerun the failed deployment job.
+The generated GitHub settings JSON also contains this value, but the separate file is
+easier to copy as multiple lines.
 
 A preparation failure leaves the old services running. After stopping begins, any failure
 triggers attempts to stop both services and leaves their release directories and backups

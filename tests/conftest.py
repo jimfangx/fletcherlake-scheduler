@@ -9,6 +9,19 @@ from fl_agent.hardware.base import BoardBackend
 from fl_agent.service import AgentService
 from fl_common.models import BoardConfig, ClusterConfig, FPGAConfig, OSInfo, SoCConfig
 
+from tests.ci_selection import network_group
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        callspec = getattr(item, "callspec", None)
+        group = network_group(
+            getattr(item, "fixturenames", ()), callspec.params if callspec else {}
+        )
+        if group:
+            item.add_marker(pytest.mark.network_acceptance)
+            item.add_marker(getattr(pytest.mark, group))
+
 
 @pytest.fixture
 def config() -> ClusterConfig:

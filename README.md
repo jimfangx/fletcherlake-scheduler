@@ -59,7 +59,9 @@ required: the daemon uses a Unix socket,
 and asyncio uses local socket pairs for thread completion. Sandboxes that block socket sends
 cannot run the agent integration suite correctly.
 
-Routine CI runs the full regression suite on Linux and unit/agent/client compatibility
+Routine CI splits Linux regression/browser checks and real network acceptance into parallel
+jobs; all must pass before deployment. Browser acceptance uses the runner's installed Chrome.
+CI also runs unit/agent/client compatibility
 and agent crash/recovery checks on both Mac architectures. The nine-board regression uses
 81 jobs; run the full
 315-job workload with `FL_TEST_SCHEDULER_STRESS=1 pixi run pytest

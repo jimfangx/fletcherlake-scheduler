@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -70,6 +71,31 @@ def release_id(revision: str) -> str:
     return f"{revision}-{run_id}-{attempt}"
 
 
+def write_known_hosts(path: Path, value: str, targets: list[Target]) -> None:
+    """Accept raw or JSON-escaped newlines, keeping the operator's exact pinned keys."""
+    value = value.strip()
+    if value.startswith('"'):
+        decoded = json.loads(value)
+        if not isinstance(decoded, str):
+            raise ValueError("FL_DEPLOY_KNOWN_HOSTS must contain OpenSSH known_hosts text")
+        value = decoded
+    value = value.replace(r"\r\n", "\n").replace(r"\n", "\n")
+    path.write_text(value.rstrip() + "\n")
+    for target in targets:
+        alias = f"fl-{target.role}-ci"
+        found = subprocess.run(
+            ["ssh-keygen", "-F", alias, "-f", str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if found.returncode:
+            raise ValueError(
+                f"FL_DEPLOY_KNOWN_HOSTS has no entry for {alias}. Copy both lines from "
+                "~/.local/state/fl-deploy/github-deploy-known-hosts into the production variable."
+            )
+
+
 def deploy(archive: Path, revision: str) -> None:
     identity = release_id(revision)
     project, zone = os.environ["FL_GCP_PROJECT"], os.environ["FL_GCP_ZONE"]
@@ -84,7 +110,7 @@ def deploy(archive: Path, revision: str) -> None:
         key, hosts = root / "identity", root / "known_hosts"
         key.write_text(os.environ.pop("FL_DEPLOY_SSH_KEY").strip() + "\n")
         key.chmod(0o600)
-        hosts.write_text(os.environ["FL_DEPLOY_KNOWN_HOSTS"])
+        write_known_hosts(hosts, os.environ["FL_DEPLOY_KNOWN_HOSTS"], targets)
         options = {t.role: ssh_options(t, project, zone, key, hosts) for t in targets}
 
         def remote(target: Target, phase: str) -> None:
@@ -104,6 +130,9 @@ def deploy(archive: Path, revision: str) -> None:
             )
             run(["ssh", *options[target.role], f"fl-deploy@{target.instance}", command])
 
+        # Verify both pinned identities and sudo access before uploading/preparing either VM.
+        for target in targets:
+            run(["ssh", *options[target.role], f"fl-deploy@{target.instance}", "sudo -n true"])
         for target in targets:
             for source, name in (
                 (archive, "cloud-release.tar.gz"),

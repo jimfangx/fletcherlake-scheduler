@@ -58,7 +58,7 @@ def test_release_includes_exact_commits_host_code_and_built_dashboard(tmp_path):
 
 
 @pytest.fixture
-def cloud_env(tmp_path, monkeypatch):
+def cloud_env(tmp_path, monkeypatch, cloud_hosts):
     values = {
         "GITHUB_RUN_ID": "123",
         "GITHUB_RUN_ATTEMPT": "1",
@@ -67,7 +67,7 @@ def cloud_env(tmp_path, monkeypatch):
         "FL_SCHEDULER_VM": "scheduler-vm",
         "FL_GATEWAY_VM": "gateway-vm",
         "FL_DEPLOY_SSH_KEY": "private key",
-        "FL_DEPLOY_KNOWN_HOSTS": "pinned hosts\n",
+        "FL_DEPLOY_KNOWN_HOSTS": cloud_hosts,
         "FL_DOMAIN": "example.test",
     }
     for name, value in values.items():
@@ -77,10 +77,48 @@ def cloud_env(tmp_path, monkeypatch):
     return archive
 
 
+@pytest.fixture(scope="session")
+def cloud_hosts(tmp_path_factory):
+    key = tmp_path_factory.mktemp("ssh-hosts") / "host"
+    subprocess.run(
+        ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key)], check=True, capture_output=True
+    )
+    public = key.with_suffix(".pub").read_text().strip()
+    return f"fl-scheduler-ci {public}\nfl-gateway-ci {public}\n"
+
+
+@pytest.mark.parametrize("formatting", ["raw", "escaped", "json", "no-final-newline"])
+def test_known_host_aliases_survive_github_variable_formatting(tmp_path, cloud_hosts, formatting):
+    value = cloud_hosts
+    if formatting == "escaped":
+        value = value.replace("\n", r"\n")
+    elif formatting == "json":
+        value = json.dumps(value)
+    elif formatting == "no-final-newline":
+        value = value.rstrip()
+    path = tmp_path / "known_hosts"
+    deploy.write_known_hosts(
+        path,
+        value,
+        [deploy.Target("scheduler", "scheduler", 22), deploy.Target("gateway", "gateway", 2222)],
+    )
+    assert path.read_text() == cloud_hosts
+
+
+def test_missing_gateway_key_fails_before_any_remote_changes(cloud_env, cloud_hosts, monkeypatch):
+    monkeypatch.setenv("FL_DEPLOY_KNOWN_HOSTS", cloud_hosts.splitlines()[0])
+    calls = []
+    monkeypatch.setattr(deploy, "run", calls.append)
+    with pytest.raises(ValueError, match="no entry for fl-gateway-ci"):
+        deploy.deploy(cloud_env, "a" * 40)
+    assert calls == []
+
+
 @pytest.mark.parametrize("failure", [None, ("gateway", "prepare"), ("scheduler", "migrate")])
 def test_deploy_orders_preparation_backups_migrations_and_health(cloud_env, monkeypatch, failure):
     phases = []
     keys = []
+    preflight = []
 
     def run(argv):
         if argv[0] in {"ssh", "scp"}:
@@ -92,6 +130,9 @@ def test_deploy_orders_preparation_backups_migrations_and_health(cloud_env, monk
             assert "start-iap-tunnel" in proxy
         if argv[0] == "ssh":
             command = shlex.split(argv[-1])
+            if command == ["sudo", "-n", "true"]:
+                preflight.append(argv[-2])
+                return
             phase, role = command[4:6]
             phases.append((role, phase))
             if (role, phase) == failure:
@@ -104,6 +145,7 @@ def test_deploy_orders_preparation_backups_migrations_and_health(cloud_env, monk
     else:
         deploy.deploy(cloud_env, "a" * 40)
     assert phases[:2] == [("scheduler", "prepare"), ("gateway", "prepare")]
+    assert preflight == ["fl-deploy@scheduler-vm", "fl-deploy@gateway-vm"]
     if failure == ("gateway", "prepare"):
         assert len(phases) == 2  # Installation failed before stopping either live service.
     else:
@@ -126,11 +168,16 @@ def test_workflow_only_deploys_tested_main_pushes_and_serializes_updates():
     repo = Path(__file__).resolve().parents[2]
     workflow = yaml.load((repo / ".github/workflows/ci.yml").read_text(), Loader=yaml.BaseLoader)
     job = workflow["jobs"]["deploy"]
-    assert job["needs"] == "python"
+    assert job["needs"] == ["python", "network"]
     assert job["if"] == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     assert job["environment"] == "production"
     assert job["concurrency"]["cancel-in-progress"] == "false"
     assert job["permissions"]["id-token"] == "write"
+    assert workflow["jobs"]["network"]["strategy"]["matrix"]["mode"] == [
+        "public",
+        "normal",
+        "relay",
+    ]
 
 
 def test_manual_bootstrap_creates_settings_without_github_auth_or_writes(tmp_path, monkeypatch):

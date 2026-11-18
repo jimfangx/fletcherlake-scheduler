@@ -39,6 +39,12 @@ packages = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "network_acceptance: real SFTP/Headscale/Tailscale acceptance, run in separate CI jobs",
+  "network_public: public SFTP transport acceptance without overlay peers",
+  "network_normal: network acceptance without forced DERP",
+  "network_relay: network acceptance with forced DERP",
+]
 
 [tool.ruff]
 line-length = 100
