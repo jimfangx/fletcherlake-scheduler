@@ -4,6 +4,11 @@ Deploy this checkout in a stable system location, for example `/opt/fl`, and ins
 Both Apple Silicon (`osx-arm64`) and Intel (`osx-64`) Macs use the same setup commands;
 Pixi selects the native environment. The committed environments target macOS 13 or later.
 The installer also selects its native executable.
+To update an existing enrolled Mac from your current checkout, run
+`bash ship/19-2-update-existing-mac.sh SSH_HOST` on your operator computer. It prepares a
+separate release, drains and interrupts active work, preserves queued jobs and enrollment,
+and confirms/restarts the agent. See the [update procedure](../ship/README.md#update-an-existing-mac)
+for prerequisites, retained releases and recovery.
 When installing hardware tools through Homebrew, Apple Silicon normally uses
 `/opt/homebrew/bin` and Intel uses `/usr/local/bin`; launchd includes both in PATH.
 Use `command -v openocd` to set an explicit `device_mapping.openocd` path if needed.

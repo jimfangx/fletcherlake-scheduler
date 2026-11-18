@@ -50,12 +50,47 @@ prints status. Use LAN SSH or a connection that will survive joining the deploym
 Headscale network: enrollment may disconnect SSH using a different existing Tailscale tailnet.
 
 This is initial installation. An already enrolled/running Mac is rejected before application
-files are replaced; use the agent upgrade/reconfigure workflow for an existing installation.
+files are replaced; use `19-2-update-existing-mac.sh` for an existing installation.
 If enrollment succeeded but confirmation was interrupted, run
 `sudo /opt/fl/.pixi/envs/default/bin/fl cluster setup confirm /opt/fl` on the Mac. Inspect the
 individual board states after deployment; the blank SophiaLake backend stays in `ERROR`
 until its hardware functions are implemented. See [board backends](../docs/board-backends.md).
 
-Scripts `19` and `20` are the original manual Mac steps; they are not additional steps after
+## Update an existing Mac
+
+Run from a current source checkout on your operator computer:
+
+```bash
+bash ship/19-2-update-existing-mac.sh my-mac
+```
+
+Use the same SSH hostname or config alias as bring-up, or set `FL_MAC_SSH`. No domain,
+enrollment ticket or new board inventory is needed. The Mac must already have a running,
+enrolled agent at `/opt/fl`, its installed Pixi and hardware tools, and sudo access.
+This command also works from a source checkout on the Mac using `localhost` with SSH enabled.
+
+The script packages current tracked and nonignored new files, including uncommitted changes
+and lilikoi host code, as `$FL_STATE/mac-update-source.tar`. Git metadata, ignored files,
+deployment state and the firmware-only Pico SDK are excluded. It uploads via SSH/SCP with
+your existing SSH config, prepares a locked environment in `/opt/fl-releases/mac-update.*`,
+and rebuilds native `uart_tsi` when the current inventory uses lilikoi. Preparation failures
+leave the running installation in place.
+
+Activation uses the lifecycle management lock and reconfiguration workflow. It invalidates
+confirmation, drains hardware, interrupts active jobs, stops launchd, switches `/opt/fl` to
+the prepared release, confirms the existing inventory and waits up to 90 seconds for READY.
+Queued work, the registered UUID, credentials, database and retained job data stay in place.
+There is no enrollment or Mac reboot. Board-shutdown failures block the source switch.
+
+The first update retains the original `/opt/fl` directory as
+`/opt/fl-releases/legacy-mac-update.*`; subsequent updates retain the previous release.
+The new release's protected `previous-installation/` directory saves the old config, launchd
+definition and `previous-project` path. Releases are retained for manual recovery; automatic
+rollback is not attempted because new code may have migrated the database. Inspect and
+correct any error before running the printed `setup confirm /opt/fl` recovery command.
+Do not delete a release referenced by `/opt/fl` or a launchd definition. For inventory edits,
+use `fl cluster setup reconfigure /opt/fl --config /path/to/new-config.yaml` separately.
+
+Scripts `19-run-on-new-mac.sh` and `20` are the original manual Mac steps; they are not additional steps after
 a successful `18` deployment. The numbered `00` driver still references the old filenames
 from before the rename and must be updated before use. Run `18` directly as shown above.

@@ -24,6 +24,8 @@ def operator(tmp_path):
     git(repo, "init")
     (repo / "ship").mkdir()
     shutil.copyfile(SCRIPT, repo / "ship/18-bringup-mac.sh")
+    for name in ("19-2-update-existing-mac.sh", "mac-update.py"):
+        shutil.copyfile(SCRIPT.parent / name, repo / "ship" / name)
     for name in ("pixi.toml", "pixi.lock", "pyproject.toml"):
         (repo / name).write_text("original\n")
     (repo / ".gitignore").write_text(".pixi/\n")
@@ -66,11 +68,14 @@ name = pathlib.Path(sys.argv[0]).name
 with open(os.environ["MAC_TEST_LOG"], "a") as log:
     log.write(json.dumps([name, *sys.argv[1:]]) + "\\n")
 if name == "ssh" and "mktemp" in sys.argv[-1]:
-    print("/tmp/fl-mac-setup.ABC123")
-if name == "scp" and sys.argv[-1].endswith("/setup.sh"):
+    kind = "update" if "fl-mac-update" in sys.argv[-1] else "setup"
+    print(f"/tmp/fl-mac-{kind}.ABC123")
+if name == "scp" and sys.argv[-1].endswith(("/setup.sh", "/update.sh")):
     shutil.copyfile(sys.argv[1], os.environ["MAC_TEST_REMOTE_SCRIPT"])
 if name == "scp" and os.environ.get("MAC_TEST_FAIL_COPY"):
     sys.exit(7)
+if name == "ssh" and "-t" in sys.argv and os.environ.get("MAC_TEST_FAIL_ACTIVATION"):
+    sys.exit(9)
 """
     )
     for name in ("ssh", "scp", "curl"):

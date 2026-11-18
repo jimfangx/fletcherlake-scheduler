@@ -37,7 +37,7 @@ def rclone_gateway(tmp_path):
         "KbdInteractiveAuthentication no\nPubkeyAuthentication yes\nStrictModes no\n"
         f"AuthorizedKeysFile {json.dumps(str(store.root / 'authorized_keys'))}\n"
         "AllowTcpForwarding no\nX11Forwarding no\nPermitTTY no\n"
-        f"AllowUsers {getpass.getuser()}\nLogLevel ERROR\n"
+        f"AllowUsers {getpass.getuser()}\nLogLevel VERBOSE\n"
         "Subsystem sftp internal-sftp\n"
     )
     logs = (tmp_path / "sshd.log").open("w+")
@@ -61,4 +61,7 @@ def rclone_gateway(tmp_path):
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        # Pytest includes captured teardown output only when a test fails.
+        logs.seek(0)
+        print("Disposable SSH server log:\n" + logs.read())
         logs.close()

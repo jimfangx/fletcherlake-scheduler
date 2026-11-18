@@ -15,7 +15,8 @@ from .store import GatewayStore
 
 
 def request(original: str) -> None:
-    if original != "internal-sftp":
+    # OpenSSH 9.6 appends a space when constructing the subsystem command.
+    if original.strip() != "internal-sftp":
         raise PlatformError("TRANSFER_PROTOCOL", "Only the scoped SFTP subsystem is permitted")
 
 

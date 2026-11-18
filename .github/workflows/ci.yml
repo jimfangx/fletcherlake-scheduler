@@ -42,9 +42,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           pixi install --locked -e deployment
+          pixi run python tests/download_network_tools.py --directory "$RUNNER_TEMP/fl-network"
           cat >> "$GITHUB_ENV" <<EOF
           FL_TEST_NGINX=$GITHUB_WORKSPACE/.pixi/envs/deployment/bin/nginx
           FL_TEST_HAPROXY=$RUNNER_TEMP/fl-haproxy/haproxy
+          FL_TEST_HEADSCALE=$RUNNER_TEMP/fl-network/headscale
           EOF
       - name: Cache compiled HAProxy validator
         if: runner.os == 'Linux'
@@ -135,6 +137,8 @@ jobs:
         with:
           name: private-network-diagnostics-${{ matrix.mode }}
           path: |
+            ${{ runner.temp }}/fl-pytest/**/sshd.log
+            ${{ runner.temp }}/fl-pytest/**/private-sshd.log
             ${{ runner.temp }}/fl-pytest/**/peer-*-transport.log
             ${{ runner.temp }}/fl-pytest/**/peer-*-transport-state.json
             ${{ runner.temp }}/fl-pytest/**/headscale-restart-report.json

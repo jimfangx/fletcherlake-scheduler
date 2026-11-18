@@ -117,7 +117,7 @@ fi
 sudo -v
 if sudo launchctl print system/edu.berkeley.fletcherlake.agent >/dev/null 2>&1 ||
    sudo test -f '/Library/Application Support/fl/credentials.json'; then
-  printf 'This Mac is already enrolled. Use the documented agent upgrade/reconfigure workflow.\n' >&2
+  printf 'This Mac is already enrolled. Use ship/19-2-update-existing-mac.sh SSH_HOST to update it.\n' >&2
   printf 'If enrollment succeeded but installation was interrupted, run setup confirm /opt/fl on the Mac.\n' >&2
   exit 1
 fi
