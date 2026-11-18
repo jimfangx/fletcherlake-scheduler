@@ -14,9 +14,11 @@ from tests.partition_proxy import FaultProxy
 from tests.partition_scenario import exercise, prepare
 
 
+@pytest.mark.skipif(
+    os.environ.get("FL_TEST_LONG_PARTITIONS") != "1",
+    reason="Set FL_TEST_LONG_PARTITIONS=1 for real 10s/60s/600s acceptance (~11 minutes)",
+)
 async def test_ten_second_one_minute_and_ten_minute_partitions(scheduler_db, connected_agents):
-    if os.environ.get("FL_TEST_LONG_PARTITIONS") != "1":
-        pytest.skip("Set FL_TEST_LONG_PARTITIONS=1 for real 10s/60s/600s acceptance (~11 minutes)")
     server, services = connected_agents
     owner = Principal(email="alice@berkeley.edu", subject="alice", role=Role.USER)
     async with AsyncExitStack() as stack:

@@ -37,7 +37,9 @@ def postgres_url() -> Iterator[str]:
                 "-l",
                 str(root / "postgres.log"),
                 "-o",
-                f"-k {root} -p 6543 -c listen_addresses=''",
+                # This disposable DB tests SQL/locking/restarts of application processes,
+                # not PostgreSQL recovery from power loss. Avoid disk flushes per commit.
+                f"-k {root} -p 6543 -c listen_addresses='' -c fsync=off -c synchronous_commit=off",
                 "start",
                 "-w",
             ],

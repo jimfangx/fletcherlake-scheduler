@@ -4,12 +4,13 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 from fl_common.models import JobConfig, ResourceConstraints
+from fl_scheduler.api.control import Control
 from fl_scheduler.db.models import Assignment, Job
 from fl_scheduler.scheduler.placement import Placement
 from sqlalchemy import select
 
 
-def submit_many(db, owner, boards, count=315):
+def submit_many(db, owner, boards, count=81):
     def submit(index):
         explicit = boards[(index // 9) % len(boards)] if index % 9 == 0 else None
         return Placement(db).submit(
@@ -25,6 +26,12 @@ def submit_many(db, owner, boards, count=315):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         return list(pool.map(submit, range(count)))
+
+
+def cancel_many(db, owner, job_ids):
+    control = Control(db)
+    for job_id in job_ids:
+        control.cancel(job_id, owner)
 
 
 def states(db):

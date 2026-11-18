@@ -87,8 +87,13 @@ Bootstrap configures access; the workflow becomes active when its files reach `m
 
 ## Each deployment
 
-1. Linux and both Mac architectures pass the existing checks. Linux builds/tests the web
-   dashboard and packages the exact checked commit plus pinned lilikoi source and built
+1. Linux runs the full regression suite, including an 81-job nine-board workload, and
+   builds/tests the web dashboard. Both Mac architectures run unit checks plus agent,
+   local dashboard/editor, enrollment, retirement, agent crash/recovery and WebSocket
+   compatibility tests.
+   The 315-job workload and real long partitions run in the manual `long acceptance`
+   workflow. Submodule checkout includes lilikoi without its nested firmware SDKs.
+   Linux packages the exact checked commit plus pinned lilikoi source and built
    dashboard into one artifact. Untracked files, Git metadata, environments and the Pico SDK
    are excluded. The same artifact is used for both cloud VMs.
 2. A serialized production job skips superseded main commits. It authenticates through

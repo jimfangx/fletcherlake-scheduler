@@ -59,6 +59,14 @@ required: the daemon uses a Unix socket,
 and asyncio uses local socket pairs for thread completion. Sandboxes that block socket sends
 cannot run the agent integration suite correctly.
 
+Routine CI runs the full regression suite on Linux and unit/agent/client compatibility
+and agent crash/recovery checks on both Mac architectures. The nine-board regression uses
+81 jobs; run the full
+315-job workload with `FL_TEST_SCHEDULER_STRESS=1 pixi run pytest
+tests/integration/test_scheduler_load.py`, or use the manual `long acceptance` workflow.
+The temporary PostgreSQL fixture disables disk flushes for speed; production database
+durability settings are unchanged. CI prints the slowest tests to track runtime.
+
 ## Simulate an agent on Linux or macOS
 
 Set up a temporary state directory using the explicit mock inventory:

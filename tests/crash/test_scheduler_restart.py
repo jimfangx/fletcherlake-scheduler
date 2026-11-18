@@ -53,7 +53,9 @@ async def test_sigkill_scheduler_preserves_execution_and_replays_durable_work(
     scheduler = SchedulerProcess(scheduler_db, tmp_path / "scheduler")
     monkeypatch.setenv("SSL_CERT_FILE", str(scheduler.root / "server.pem"))
     service = AgentService(registered, root, root / "run", boards)
-    service.scheduler_link = SchedulerConnection(service, scheduler.origin, agent_token)
+    service.scheduler_link = SchedulerConnection(
+        service, scheduler.origin, agent_token, heartbeat_seconds=0.05
+    )
     commands = Commands(scheduler_db)
     started = False
     try:

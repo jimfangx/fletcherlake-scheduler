@@ -12,14 +12,27 @@ from fl_agent.configuration import confirm_config, write_config
 from fl_agent.connection import SchedulerConnection
 from fl_agent.service import AgentService
 from fl_scheduler.agents.gateway import AgentGateway
+from fl_scheduler.db.async_calls import database_call
 from fl_scheduler.db.models import Job
 from fl_scheduler.registry import Registry
 
 
-async def until(predicate: Callable[[], bool], seconds: float = 15) -> None:
-    async with asyncio.timeout(seconds):
-        while not predicate():  # noqa: ASYNC110 -- poll external server/replicated DB state
-            await asyncio.sleep(0.02)
+async def until(
+    predicate: Callable[[], bool],
+    seconds: float = 15,
+    *,
+    poll_in_thread: bool = False,
+    description: str = "condition",
+) -> None:
+    try:
+        async with asyncio.timeout(seconds):
+            while True:
+                ready = await database_call(predicate) if poll_in_thread else predicate()
+                if ready:
+                    return
+                await asyncio.sleep(0.02)
+    except TimeoutError as error:
+        raise TimeoutError(f"Timed out after {seconds}s waiting for {description}") from error
 
 
 class GatewayServer:
