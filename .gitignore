@@ -10,6 +10,7 @@ build/
 dist/
 .coverage
 .env
+gha-creds-*.json
 node_modules/
 services/dashboard/test-results/
 services/dashboard/playwright-report/

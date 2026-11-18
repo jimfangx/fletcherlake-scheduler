@@ -29,6 +29,7 @@ from .files import atomic_write
 from .hardware.base import BoardBackend
 from .hardware.lilikoi import LilikoiBoardBackend
 from .hardware.mock import MockBoardBackend
+from .hardware.sophialake import SophiaLakeBoardBackend
 from .locks import ExclusiveLock
 from .logs import AgentLogs
 from .recovery import recover_jobs
@@ -152,7 +153,11 @@ class AgentService:
     def _make_backend(board: BoardConfig) -> BoardBackend:
         if board.backend == "lilikoi":
             return LilikoiBoardBackend(board.device_mapping, board.firmware_timeout_seconds)
-        return MockBoardBackend()
+        if board.backend == "sophialake":
+            return SophiaLakeBoardBackend(board.device_mapping, board.firmware_timeout_seconds)
+        if board.backend == "mock":
+            return MockBoardBackend()
+        raise PlatformError("INVALID_BACKEND", f"Unknown board backend: {board.backend}")
 
     def _repair_retention(self) -> None:
         for job in self.db.jobs():

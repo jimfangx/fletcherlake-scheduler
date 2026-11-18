@@ -43,6 +43,33 @@ Logout revokes the remote session before removing local credentials; if the serv
 unreachable, the command fails and preserves them for a later retry. If credentials cannot be
 saved after a successful one-use refresh, log in again.
 
+## Job YAML and board selection
+
+Create a job YAML describing the inputs and hardware selection:
+
+```yaml
+resource_constraints:
+  board: sophialake-0
+binary: ./build/app.elf
+# bitstream: ./build/top.bit  # Include if FPGA programming is needed.
+run_timeout: 3600
+run_collateral_ttl: 30
+```
+
+`board` selects an exact configured board ID. To select any compatible board, omit `board`
+and use `soc` and/or `fpga` under `resource_constraints`; these must match the inventory's
+`socs[].name` and `fpgas[].model` labels exactly. All supplied constraints apply together.
+Without constraints, the scheduler can select any eligible board. Ask the board operator
+for the board ID, labels and compatible ELF/bitstream requirements. The `backend` is selected
+by the operator in cluster configuration; it is not a job field.
+
+`binary` and `bitstream` paths are relative to the job YAML. `run_timeout` is the job execution
+deadline in seconds (including programming); `run_collateral_ttl` is artifact retention in
+days after completion. Optional `priority` defaults to 0 (lower values run first),
+`force_reflash` defaults to false, and `shmoo` enables voltage/frequency sweeps on hardware
+that supports them. See [the general example](../examples/job.yaml) and
+[SophiaLake template and hardware implementation requirements](board-backends.md).
+
 ## Submit and resume
 
 Install rclone and OpenSSH on the user host. The command resolves YAML input paths relative to

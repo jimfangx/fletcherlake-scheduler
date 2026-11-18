@@ -6,7 +6,8 @@ import platform
 import shutil
 import zipfile
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 VERSION = "v1.75.1"
 CHECKSUMS = {
@@ -29,6 +30,28 @@ CHECKSUMS = {
 }
 
 
+def download_archive(filename: str, digest: str) -> bytes:
+    urls = (
+        f"https://downloads.rclone.org/{VERSION}/{filename}",
+        f"https://github.com/rclone/rclone/releases/download/{VERSION}/{filename}",
+    )
+    failures: list[str] = []
+    for url in urls:
+        request = Request(url, headers={"User-Agent": "fletcherlake-platform/rclone-installer"})
+        try:
+            with urlopen(request, timeout=60) as response:
+                data = response.read()
+        except (URLError, TimeoutError) as error:
+            failures.append(f"{url}: {error}")
+            continue
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise RuntimeError("Official rclone archive differs from the pinned SHA256")
+        return data
+    raise RuntimeError(
+        "Could not download pinned rclone from official sources: " + "; ".join(failures)
+    )
+
+
 def download(directory: Path) -> Path:
     selected = CHECKSUMS.get((platform.system(), platform.machine()))
     if selected is None:
@@ -38,11 +61,7 @@ def download(directory: Path) -> Path:
     filename = f"rclone-{VERSION}-{target}.zip"
     archive = directory / filename
     if not archive.exists() or hashlib.sha256(archive.read_bytes()).hexdigest() != digest:
-        with urlopen(f"https://downloads.rclone.org/{VERSION}/{filename}", timeout=60) as response:
-            data = response.read()
-        if hashlib.sha256(data).hexdigest() != digest:
-            raise RuntimeError("Official rclone archive differs from the pinned SHA256")
-        archive.write_bytes(data)
+        archive.write_bytes(download_archive(filename, digest))
     executable = directory / "rclone"
     with zipfile.ZipFile(archive) as contents, executable.open("wb") as output:
         # Extract only the known executable; no archive-supplied filesystem paths are used.

@@ -1,13 +1,17 @@
 name: checks
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   python:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [ubuntu-latest, macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: prefix-dev/setup-pixi@v0.9.2
         with:
           pixi-version: v0.81.0
@@ -53,6 +57,19 @@ jobs:
           FL_TEST_HAPROXY=$RUNNER_TEMP/fl-haproxy/haproxy
           EOF
       - run: pixi run test --basetemp "$RUNNER_TEMP/fl-pytest"
+      - name: Package tested cloud release
+        if: runner.os == 'Linux' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: >-
+          python3 ship/cloud/package_release.py --revision "$GITHUB_SHA"
+          --output "$RUNNER_TEMP/fl-cloud.tar.gz"
+      - name: Save tested cloud release
+        if: runner.os == 'Linux' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-release-${{ github.sha }}
+          path: ${{ runner.temp }}/fl-cloud.tar.gz
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain protected network acceptance diagnostics
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@v4
@@ -65,3 +82,55 @@ jobs:
             ${{ runner.temp }}/fl-pytest/**/scheduler-restart-report.json
           if-no-files-found: ignore
           retention-days: 7
+  deploy:
+    name: Deploy scheduler and gateway
+    needs: python
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    concurrency:
+      group: fl-cloud-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip a superseded main commit
+        id: current
+        shell: bash
+        run: |
+          latest=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$latest" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping a commit superseded on main."
+          fi
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: steps.current.outputs.current == 'true'
+        with:
+          name: cloud-release-${{ github.sha }}
+          path: ${{ runner.temp }}/cloud-release
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        if: steps.current.outputs.current == 'true'
+        with:
+          project_id: ${{ vars.FL_GCP_PROJECT }}
+          workload_identity_provider: ${{ vars.FL_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FL_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        if: steps.current.outputs.current == 'true'
+      - name: Update the two cloud VMs
+        if: steps.current.outputs.current == 'true'
+        env:
+          FL_GCP_PROJECT: ${{ vars.FL_GCP_PROJECT }}
+          FL_GCP_ZONE: ${{ vars.FL_GCP_ZONE }}
+          FL_DOMAIN: ${{ vars.FL_DOMAIN }}
+          FL_SCHEDULER_VM: ${{ vars.FL_SCHEDULER_VM }}
+          FL_GATEWAY_VM: ${{ vars.FL_GATEWAY_VM }}
+          FL_DEPLOY_SSH_KEY: ${{ secrets.FL_DEPLOY_SSH_KEY }}
+          FL_DEPLOY_KNOWN_HOSTS: ${{ vars.FL_DEPLOY_KNOWN_HOSTS }}
+        run: >-
+          python3 ship/cloud/deploy.py --revision "$GITHUB_SHA"
+          --archive "$RUNNER_TEMP/cloud-release/fl-cloud.tar.gz"

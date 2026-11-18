@@ -1,0 +1,9 @@
+# Select this exact physical board. Paths are relative to this job YAML file.
+# Requires a completed SophiaLake backend and an ELF built for its installed chip.
+resource_constraints:
+  board: sophialake-0
+binary: ./build/app.elf
+# If required by the board, provide a compatible FPGA bitstream:
+# bitstream: ./build/top.bit
+run_timeout: 3600
+run_collateral_ttl: 30

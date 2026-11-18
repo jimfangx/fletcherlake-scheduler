@@ -1,8 +1,28 @@
 # macOS operations
 
 Deploy this checkout in a stable system location, for example `/opt/fl`, and install Pixi.
+Both Apple Silicon (`osx-arm64`) and Intel (`osx-64`) Macs use the same setup commands;
+Pixi selects the native environment. The committed environments target macOS 13 or later.
+The installer also selects its native executable.
+When installing hardware tools through Homebrew, Apple Silicon normally uses
+`/opt/homebrew/bin` and Intel uses `/usr/local/bin`; launchd includes both in PATH.
+Use `command -v openocd` to set an explicit `device_mapping.openocd` path if needed.
+When updating a checkout or source bundle from a release that did not include Intel in
+`pixi.lock`, generate the lock once with the repository's pinned Pixi version (`v0.81.0`)
+on a network-connected development host:
+
+```sh
+pixi lock
+```
+
+Lock generation covers every platform in `pixi.toml`; an Apple Silicon Mac can generate
+the Intel entries. Include both the updated `pixi.toml` and `pixi.lock` in the source bundle,
+then use `pixi install --locked` on the destination Mac. A source archive from the previous
+release does not include these platform changes.
+
 Board definitions must come from the operator. Use `examples/cluster.yaml` only for simulation;
-real boards select `backend: lilikoi` and provide firmware command mappings.
+real boards select `backend: lilikoi` and provide the board identity and tool paths described
+in [the lilikoi backend configuration](#lilikoi-backend).
 
 The current Mac tool setup uses Vivado Lab and does not require BWRC license forwarding.
 Leave `license_relay` omitted or `null` in the Linux deployment inventory. Tools that later
@@ -120,6 +140,28 @@ described in [permanent retirement](retirement.md) applies to Python callers.
 
 ## Lilikoi backend
 
+Install OpenOCD and the host-native Spike `libfesvr` headers/library before building
+`uart_tsi`. Run Homebrew installation as its owning account, then build with the installed
+formula's prefix so the same command works on Intel and Apple Silicon:
+
+```sh
+(
+  set -e
+  brew tap riscv-software-src/riscv
+  brew install open-ocd riscv-isa-sim
+  FL_FESVR_PREFIX=$(brew --prefix riscv-isa-sim)
+  test -f "$FL_FESVR_PREFIX/include/fesvr/tsi.h"
+  test -f "$FL_FESVR_PREFIX/include/fesvr/htif.h"
+  sudo make -C /opt/fl/packages/lilikoi/host/uart_tsi RISCV="$FL_FESVR_PREFIX"
+)
+```
+
+The `riscv-isa-sim` formula comes from the
+[RISC-V Homebrew tap](https://github.com/riscv-software-src/homebrew-riscv/blob/main/riscv-isa-sim.rb).
+If Homebrew reports a permission error, resolve that as its owning account before building.
+Missing `fesvr/tsi.h` or `fesvr/htif.h` means the selected prefix lacks the required headers;
+install `riscv-isa-sim` or use the prefix of an existing compatible native `libfesvr`.
+
 `backend: lilikoi` drives a Fletcher Lake board through [lilikoi](../packages/lilikoi), the
 hardware team's host tooling vendored as a git submodule (`git submodule update --init`). It
 implements every `fl_agent.hardware.base.BoardBackend` operation: RP2350 power sequencing and
@@ -149,6 +191,14 @@ Each operation has a deadline, `firmware_timeout_seconds` on its board (default 
 `wait_for_completion` shares it, so set it to at least the longest run. The job's own deadline
 covers preparation and execution. Cancelling an operation closes the socket; the daemon finishes
 it on its own, and the agent's cleanup (`stop`, `power_off`) settles the board.
+
+## Additional board backends
+
+`backend: sophialake` selects a blank SophiaLake implementation of the same `BoardBackend`
+interface. Hardware methods must be implemented before this board can become ready.
+See [the backend implementation guide](board-backends.md) for the template, lifecycle
+contract, configuration examples and job selection. The setup editor supports `lilikoi`,
+`sophialake` and `mock`; each physical board has its own backend instance and queue.
 
 ## Recovery
 

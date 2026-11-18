@@ -22,7 +22,7 @@ NUMBERS = (
 YAML_FIELDS: tuple[tuple[str, str, object], ...] = (
     ("fpgas", "FPGAs: list of model/device mappings", []),
     ("socs", "SoCs: list of name/device mappings", []),
-    ("device_mapping", "Device mapping: lilikoi board identity and tool paths", {}),
+    ("device_mapping", "Device mapping: backend-specific identities and tool paths", {}),
 )
 
 
@@ -43,7 +43,8 @@ class BoardEditor(ModalScreen[BoardConfig | None]):
                 with TabPane("Devices & firmware"):
                     with VerticalScroll():
                         yield Static(
-                            "Use standard YAML. A lilikoi board needs at least mcu (RP2350 serial)."
+                            "Use standard YAML. lilikoi needs mcu (RP2350 serial). "
+                            "sophialake is a template requiring hardware implementation."
                         )
                         for key, label, default_yaml in YAML_FIELDS:
                             yield Label(label)
@@ -59,8 +60,8 @@ class BoardEditor(ModalScreen[BoardConfig | None]):
         yield Label("Backend (choose explicitly)")
         backend = self.initial.get("backend")
         yield Select.from_values(
-            ["lilikoi", "mock"],
-            value=backend if backend in {"lilikoi", "mock"} else Select.BLANK,
+            ["lilikoi", "sophialake", "mock"],
+            value=backend if backend in {"lilikoi", "sophialake", "mock"} else Select.BLANK,
             id="backend",
         )
         yield Label("Clock source")

@@ -1,7 +1,7 @@
 [workspace]
 name = "fletcherlake-platform"
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-arm64"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
 
 [dependencies]
 python = "3.12.*"

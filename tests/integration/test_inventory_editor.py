@@ -19,7 +19,8 @@ async def open_slot(app, pilot, slot):
     return app.screen
 
 
-async def test_edit_boards_host_tools_and_power_without_mutating_source(config, tmp_path):
+@pytest.mark.parametrize("backend", ["lilikoi", "sophialake"])
+async def test_edit_boards_host_tools_and_power_without_mutating_source(config, tmp_path, backend):
     initial = config.model_dump(mode="json")
     initial["boards"][2] = None
     original = deepcopy(initial)
@@ -34,7 +35,7 @@ async def test_edit_boards_host_tools_and_power_without_mutating_source(config, 
         assert app.boards[2] is None
         await pilot.press("ctrl+s")
         assert isinstance(app.screen, BoardEditor) and app.return_value is None
-        board.query_one("#backend", Select).value = "lilikoi"
+        board.query_one("#backend", Select).value = backend
         board.query_one("#num_vrails", Input).value = "2"
         board.query_one("#fpgas", TextArea).load_text("- model: VU9P\n  device: fpga0")
         board.query_one("#socs", TextArea).load_text("- name: chipB\n  device: soc0")
@@ -47,7 +48,7 @@ async def test_edit_boards_host_tools_and_power_without_mutating_source(config, 
         assert not isinstance(app.screen, BoardEditor), str(
             board.query_one("#board-error", Static).render()
         )
-        assert app.boards[2]["backend"] == "lilikoi"
+        assert app.boards[2]["backend"] == backend
         # Cancellation rolls back an individual board's draft.
         board = await open_slot(app, pilot, 0)
         board.query_one("#board_id", Input).value = "discarded"

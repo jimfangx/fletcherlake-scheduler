@@ -136,7 +136,9 @@ ensure Mac agents resolve the private gateway address.
 The installer downloads official rclone **v1.75.1** binaries and verifies a pinned SHA-256
 before extracting the binary. It supports Linux x86-64/arm64 and macOS Apple Silicon/Intel.
 macOS 12 or later is required by the pinned release. No local compilation or OpenSSL
-installation is needed. Install on each user host and Mac, from the reviewed checkout:
+installation is needed. If the downloads host returns an HTTP/network error, the installer
+retries the official GitHub release asset with the same pinned SHA-256. A checksum mismatch
+fails immediately. Install on each user host and Mac, from the reviewed checkout:
 
 ```sh
 pixi run python tests/download_rclone.py --directory /tmp/fl-rclone

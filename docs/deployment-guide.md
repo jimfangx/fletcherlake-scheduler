@@ -55,7 +55,8 @@ your organization already allows the required Groups operations. The Google proj
 needed even if the hosts run on AWS or on premises. AWS hosting is not required, and GCP
 Compute Engine hosting is not required merely to use Google login.
 
-Use Linux x86-64 and Apple Silicon macOS for the committed Pixi lock. Size storage for gateway
+Use Linux x86-64 or macOS on Apple Silicon or Intel. Pixi selects the native `linux-64`,
+`osx-arm64` or `osx-64` environment. Size storage for gateway
 staging and Mac collateral retention, not just Python packages. PCB firmware is supplied by the
 hardware team; production inventories must not use the mock backend.
 
@@ -1225,7 +1226,8 @@ done
 The Pixi binary is pinned to `FL_PIXI_VERSION`; the bootstrap uses the official installer,
 which selects the host architecture. The documented GCP E2 and AWS M7i VMs use the
 `pixi-x86_64-unknown-linux-musl.tar.gz` asset; `pixi-aarch64-unknown-linux-musl.tar.gz`
-is for ARM64 Linux. Apple Silicon Macs use the Darwin ARM64 asset.
+is for ARM64 Linux. Apple Silicon Macs use the Darwin ARM64 asset; Intel Macs use
+`pixi-x86_64-apple-darwin.tar.gz`. The installer selects the native asset automatically.
 If Pixi reports no manifest in `/opt/fl`, recreate and upload the full source archive with
 the repository-root command above; upgrading Pixi alone does not supply missing source files.
 Record `/usr/local/bin/pixi --version` and retain the installer with your deployment records
@@ -1818,7 +1820,8 @@ FL_MAC_SSH=REPLACE_WITH_ADMIN_USER@REPLACE_WITH_MAC_HOST
 scp "$FL_STATE/source.tar" "$FL_MAC_SSH:fl-source.tar"
 ```
 
-**On the Apple Silicon Mac**, use an administrator account. Install an active
+**On the Apple Silicon or Intel Mac running macOS 13 or later**, use an administrator
+account. Install an active
 Tailscale Mac app first; approve its macOS network extension and make its CLI available on
 PATH. These are Mac prerequisites, shared by either hosting provider. Apple's command-line
 tools prompt is interactive; finish it before running the second block:
@@ -1866,8 +1869,9 @@ when using `vivado_lab` or a wrapper. Inventory tool metadata alone does not exe
 Create a cluster override YAML with one to three explicit board slots. Start from
 `examples/cluster-lilikoi.yaml`: `backend: lilikoi` with the board's `device_mapping` (RP2350
 serial, UART-TSI tty, JTAG serial, tool paths). lilikoi is the `packages/lilikoi` submodule;
-build its `uart_tsi` (`make -C /opt/fl/packages/lilikoi/host/uart_tsi`) and install OpenOCD
-(`brew install open-ocd`) on the Mac. Before running production jobs, validate power on/off,
+install OpenOCD and the native Spike `libfesvr` dependency, then build `uart_tsi` with
+`RISCV` set to the installed library's prefix as described in
+[the Mac hardware-tool setup](macos-operations.md#lilikoi-backend). Before running production jobs, validate power on/off,
 FPGA programming, SoC loading, start, stop, UART, completion and any requested
 voltage/frequency/sensor operations. Full contract:
 [Mac operations](macos-operations.md#lilikoi-backend).

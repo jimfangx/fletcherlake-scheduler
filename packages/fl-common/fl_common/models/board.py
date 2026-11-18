@@ -28,6 +28,6 @@ class BoardConfig(Schema):
     clock_source: Literal["on_chip", "fpga", "external_clock_gen"] = "on_chip"
     fpgas: list[FPGAConfig] = Field(default_factory=list)
     socs: list[SoCConfig] = Field(default_factory=list)
-    backend: Literal["mock", "lilikoi"]
-    # Deadline for one lilikoi operation; wait_for_completion spans a whole SoC run.
+    backend: Literal["mock", "lilikoi", "sophialake"]
+    # Backend-enforced operation deadline; wait_for_completion spans a whole SoC run.
     firmware_timeout_seconds: int = Field(default=60, gt=0, le=35 * 86400)

@@ -47,7 +47,8 @@ pixi run lint
 pixi run typecheck
 ```
 
-The lockfile covers Linux x86-64 and macOS Apple Silicon, with Python 3.12. Python source is
+The workspace supports Linux x86-64 and both Apple Silicon and Intel macOS, with Python 3.12.
+Pixi selects `osx-arm64` on Apple Silicon and `osx-64` on Intel Macs. Python source is
 split into `fl-common`, `fl-agent`, and `fl-cli` directories. One platform distribution packages
 these modules and service packages together for now; this avoids independent version drift in
 shared contracts.
@@ -81,7 +82,10 @@ pixi run fl job kill JOB_UUID
 Paths in `job.yaml` are resolved relative to that file. The example expects files at
 `examples/build/hello.elf` and `examples/build/top.bit`; supply your own inputs. Mock boards do
 not execute the ELF, but exercise programming, execution, results, UART, and retention paths.
-Every board must explicitly declare `backend: mock` or `backend: lilikoi`.
+Every board must explicitly declare its backend: `mock` for simulation, `lilikoi` for
+Fletcher Lake, or `sophialake` for the blank implementation template. See
+[implementing board backends](docs/board-backends.md) for the SophiaLake functions to fill in
+and how jobs select a physical board or compatible hardware labels.
 
 For a populated TUI demo, run this from the repository root instead of starting the empty agent:
 
@@ -127,6 +131,9 @@ The optional Kasa fields and force-off interface are scaffold-only. There is no 
 and no dependency on smart-plug software.
 
 ## Scheduler deployment
+
+For automatic updates of the existing scheduler and gateway on pushes to `main`, see
+[cloud CI/CD](docs/cloud-cicd.md). Initial provisioning remains a separate workflow.
 
 Start with the [complete deployment guide](docs/deployment-guide.md) for all components,
 Google Workspace credentials, AWS/GCP hosting and optional third-party integrations.

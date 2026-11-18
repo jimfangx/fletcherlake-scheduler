@@ -1,0 +1,18 @@
+# TEMPLATE ONLY: implement SophiaLakeBoardBackend before enabling real hardware.
+# Host facts are autodetected by setup. Put each physical board in its own slot.
+boards:
+  - board_id: sophialake-0
+    backend: sophialake
+    # The board creator defines/validates these keys when implementing the backend.
+    device_mapping: {}
+    # Fill in actual inventory, sensor counts, and clock source before deployment.
+    # SoC/FPGA labels select hardware; they do not load configuration files.
+    socs: []
+    fpgas: []
+    num_vrails: 0
+    num_vsense: 0
+    num_isense: 0
+    clock_source: on_chip
+    firmware_timeout_seconds: 7200
+  - null
+  - null
