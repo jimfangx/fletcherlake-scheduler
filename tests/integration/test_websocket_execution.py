@@ -1,5 +1,6 @@
 """Real TCP/WebSocket + PostgreSQL + three Mac simulators, without SSH execution."""
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -7,16 +8,20 @@ from fl_common.models import JobConfig
 from fl_common.models.scheduler import Principal, Role
 from fl_common.protocol import Message, MessageType
 from fl_scheduler.agents.commands import Commands
-from fl_scheduler.db.models import Cluster, Command, Job
+from fl_scheduler.db.async_calls import database_call
+from fl_scheduler.db.models import Cluster, Command, Event, Job
 from fl_scheduler.scheduler.placement import Placement
 from sqlalchemy import select
 
 from tests.connected import GatewayServer, state, until
 
 
+@pytest.mark.parametrize("delay_events", [False, True], ids=["normal", "delayed-events"])
 async def test_scheduler_to_nine_boards_to_replicated_results(
     scheduler_db,
     connected_agents,
+    monkeypatch,
+    delay_events,
 ) -> None:
     server, services = connected_agents
     principal = Principal(email="alice@berkeley.edu", subject="alice", role=Role.USER)
@@ -24,10 +29,65 @@ async def test_scheduler_to_nine_boards_to_replicated_results(
     specs = [placement.submit(JobConfig(), principal) for _ in range(9)]
     assigned = placement.reserve_pending()
     assert len(assigned) == 9
+    release_events, events_blocked = threading.Event(), threading.Event()
+    if delay_events:
+        # Hold event projection only after a cluster's final job snapshot commits.
+        # This exposes the interval where SUCCEEDED is visible but its events aren't.
+        completed = {service.config.cluster_id: threading.Event() for service in services}
+        expected_jobs = {
+            cluster_id: {item.job_id for item in assigned if item.cluster_id == cluster_id}
+            for cluster_id in completed
+        }
+        reconciler = server.gateway.reconciler
+        original_snapshot, original_events = reconciler.snapshot, reconciler.events
+
+        def snapshot(cluster_id, session_id, value):
+            original_snapshot(cluster_id, session_id, value)
+            finished = {record.spec.job_id for record in value.jobs if record.state == "SUCCEEDED"}
+            if expected_jobs[cluster_id] <= finished:
+                completed[cluster_id].set()
+
+        def events(cluster_id, session_id, value):
+            if completed[cluster_id].is_set():
+                events_blocked.set()
+                assert release_events.wait(15), "Event projection was not released"
+            return original_events(cluster_id, session_id, value)
+
+        monkeypatch.setattr(reconciler, "snapshot", snapshot)
+        monkeypatch.setattr(reconciler, "events", events)
     commands = Commands(scheduler_db)
     for spec in specs:
         commands.enqueue_after_transfer(spec.job_id)
-    await until(lambda: all(state(scheduler_db, spec.job_id) == "SUCCEEDED" for spec in specs))
+    try:
+        await until(
+            lambda: all(state(scheduler_db, spec.job_id) == "SUCCEEDED" for spec in specs),
+            poll_in_thread=True,
+            description="all nine job snapshots completed",
+        )
+        # Capture local cursors on the agent's event loop; PostgreSQL polling can run
+        # in a worker without reading the agents' SQLite connections from that thread.
+        expected_cursors = {
+            service.config.cluster_id: service.db.last_sequence() for service in services
+        }
+        assert all(sequence > 0 for sequence in expected_cursors.values())
+
+        def events_replicated():
+            with scheduler_db.transaction() as session:
+                cursors = dict(
+                    session.execute(select(Cluster.cluster_id, Cluster.event_sequence)).all()
+                )
+            return all(
+                cursors.get(cluster_id, -1) >= sequence
+                for cluster_id, sequence in expected_cursors.items()
+            )
+
+        if delay_events:
+            await until(events_blocked.is_set, description="event projection held after snapshots")
+            assert not await database_call(events_replicated)
+    finally:
+        # Also unblock projection if an earlier assertion fails, allowing clean teardown.
+        release_events.set()
+    await until(events_replicated, poll_in_thread=True, description="all agent events replicated")
     assert {job.board_id for service in services for job in service.db.jobs()} == {
         assignment.board_id for assignment in assigned
     }
@@ -35,11 +95,15 @@ async def test_scheduler_to_nine_boards_to_replicated_results(
         job.spec.owner == principal.email for service in services for job in service.db.jobs()
     )
     await until(
-        lambda: all(not commands.pending(service.config.cluster_id) for service in services)
+        lambda: all(not commands.pending(service.config.cluster_id) for service in services),
+        poll_in_thread=True,
+        description="all enqueue commands acknowledged",
     )
     with scheduler_db.transaction() as session:
         assert all(cluster.event_sequence > 0 for cluster in session.scalars(select(Cluster)))
         assert all(job.record["state"] == "SUCCEEDED" for job in session.scalars(select(Job)))
+        succeeded = list(session.scalars(select(Event.job_id).where(Event.type == "JOB_SUCCEEDED")))
+        assert len(succeeded) == 9 and set(succeeded) == {spec.job_id for spec in specs}
 
 
 async def test_command_replay_does_not_execute_same_job_twice(
