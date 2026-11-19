@@ -45,8 +45,11 @@ remains in Google Groups. Do not advertise subnet routes or an exit node.
 
 The shipped policy permits only the listed TCP flows. Tag owners are empty; tags are assigned
 by administrator-issued keys. Cluster nodes cannot contact one another. Scheduler/API ports
-are 443; the gateway SSH/SFTP ports are reserved for the transfer implementation. Keep its
-configured data range and the ACL consistent when that implementation is deployed.
+are 443; gateway SSH/SFTP uses port 22. The scheduler can also reach cluster port 22 for
+operator/admin [terminal SSH access](remote-client.md#ssh-into-a-cluster). Other cluster nodes
+and public callers cannot reach it through this policy. The public scheduler's `/api/ssh/`
+WebSocket route requires a one-use ticket issued to an authenticated operator/admin; agent
+WebSocket routes remain private.
 
 Obtain public HTTPS certificates for the scheduler and coordinator. Obtain the private agent
 hostname's certificate through DNS validation. Configure nginx using

@@ -90,4 +90,21 @@ async def test_real_https_routing_limits_and_private_websocket(tmp_path):
             ) as websocket:
                 await websocket.send("private agent snapshot")
                 assert await websocket.recv() == "private agent snapshot"
+            uri = (
+                origins["127.0.0.1"]
+                .replace("https:", "wss:")
+                .replace("127.0.0.1", scheduler.hostname)
+                + "/api/ssh/session"
+            )
+            async with connect(
+                uri,
+                ssl=context,
+                host="127.0.0.1",
+                server_hostname="127.0.0.1",
+                open_timeout=5,
+                close_timeout=5,
+                proxy=None,
+            ) as websocket:
+                await websocket.send(b"encrypted SSH stream")
+                assert await websocket.recv() == b"encrypted SSH stream"
         assert "PRIVATE_OAUTH_MARKER" not in (root / "nginx.log").read_text()

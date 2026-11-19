@@ -90,6 +90,9 @@ class RemoteClient:
         """Current authenticated scheduler destination, without exposing session credentials."""
         return self._credentials().scheduler
 
+    def clusters(self) -> list[dict[str, Any]]:
+        return list(self.request("GET", "/api/clusters"))
+
     def status(self, job_id: UUID) -> dict[str, Any]:
         return dict(self.request("GET", f"/api/jobs/{job_id}"))
 

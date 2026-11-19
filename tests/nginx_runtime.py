@@ -31,6 +31,12 @@ def upstream():
         await websocket.send_text(await websocket.receive_text())
         await websocket.close()
 
+    @app.websocket("/api/ssh/session")
+    async def ssh_echo(websocket: WebSocket):
+        await websocket.accept()
+        await websocket.send_bytes(await websocket.receive_bytes())
+        await websocket.close()
+
     @app.api_route("/{path:path}", methods=["GET", "POST", "DELETE"])
     async def observe(path: str, request: Request):
         body = await request.body()

@@ -29,6 +29,7 @@ class Principal(Schema):
             "job:manage",
             "cluster:drain",
             "cluster:restart",
+            "cluster:ssh",
             "cluster:force_poweroff",
         }
         admin = operator | {"cluster:enroll", "cluster:destroy", "system:admin"}

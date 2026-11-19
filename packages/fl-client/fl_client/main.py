@@ -20,9 +20,42 @@ from .monitor import Monitor
 from .receipts import ReceiptStore
 from .results import Results
 from .session import ensure_login
+from .ssh import open_ssh
 from .submission import Submission
 
 app = typer.Typer(help="Submit and monitor bringup jobs from any user host.")
+
+
+@app.command()
+def clusters(credentials: Path | None = None, scheduler: str | None = None) -> None:
+    """List clusters and their IDs for remote access."""
+    with errors(), RemoteClient(CredentialStore(credentials)) as client:
+        ensure_login(client, scheduler, typer.echo)
+        typer.echo(json.dumps(client.clusters(), indent=2))
+
+
+@app.command()
+def ssh(
+    cluster_id: UUID,
+    user: str = "fletcherlake",
+    identity: Path | None = None,
+    known_hosts: Path | None = None,
+    command: str | None = None,
+    credentials: Path | None = None,
+    scheduler: str | None = None,
+) -> None:
+    """SSH into a cluster via HTTPS (operators/admins); use the Mac's normal login/key."""
+    with errors(), RemoteClient(CredentialStore(credentials)) as client:
+        ensure_login(client, scheduler, lambda line: typer.echo(line, err=True))
+        code = open_ssh(
+            client,
+            cluster_id,
+            user=user,
+            identity=identity,
+            known_hosts=known_hosts,
+            command=command,
+        )
+    raise typer.Exit(code if code >= 0 else 128 - code)
 
 
 @app.command()

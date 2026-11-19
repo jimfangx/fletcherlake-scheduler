@@ -7,6 +7,7 @@ from uuid import UUID
 
 import typer
 from fl import Cluster
+from fl_client.main import ssh
 from fl_common.models import JobConfig
 
 from . import lifecycle, setup
@@ -20,6 +21,7 @@ app.add_typer(job_app, name="job")
 cluster_app.add_typer(setup.app, name="setup")
 cluster_app.command()(lifecycle.restart)
 cluster_app.command()(lifecycle.destroy)
+cluster_app.command()(ssh)
 
 
 def local() -> Cluster:

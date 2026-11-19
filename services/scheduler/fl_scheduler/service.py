@@ -34,6 +34,7 @@ from .notifications.alerts import Alerts
 from .notifications.api import routes as notification_routes
 from .notifications.service import Notifications
 from .scheduler.placement import Placement
+from .ssh import SshRelay
 from .transfers.api import routes as transfer_routes
 from .transfers.service import TransferService
 from .transfers.submission_api import routes as submission_routes
@@ -86,6 +87,8 @@ def create_app(
     downloads: Downloads | None = None,
     notifications: Notifications | None = None,
 ) -> FastAPI:
+    ssh = SshRelay(db, auth)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         task = asyncio.create_task(Maintenance(db, auth).run()) if maintenance else None
@@ -127,10 +130,13 @@ def create_app(
             if notification_task:
                 notification_task.cancel()
                 await asyncio.gather(notification_task, return_exceptions=True)
+            await ssh.close()
             if shutdown:
                 await shutdown()
 
     app = FastAPI(title="Fletcherlake scheduler", lifespan=lifespan)
+    app.state.ssh = ssh
+    app.include_router(ssh.router)
     app.include_router(auth.router)
     app.include_router(routes(auth, Queries(db), Placement(db), Control(db)))
     app.include_router(AgentGateway(db).router)

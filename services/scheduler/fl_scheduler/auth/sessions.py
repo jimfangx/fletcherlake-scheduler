@@ -16,6 +16,7 @@ from fl_common.models.scheduler import Principal
 from pydantic import AwareDatetime, SecretStr
 from sqlalchemy import select
 
+from ..db.async_calls import database_call
 from ..db.core import Database
 from ..db.models import User
 from .google import Identity
@@ -107,7 +108,24 @@ class Sessions:
             return row.session_id, Identity(user.subject, user.email)
 
     async def authenticate(self, token: str) -> Principal:
-        _, identity = await asyncio.to_thread(self._lookup, token)
+        return (await self.identify(token))[1]
+
+    async def identify(self, token: str) -> tuple[UUID, Principal]:
+        session_id, identity = await database_call(self._lookup, token)
+        return session_id, await self.groups.principal(identity)
+
+    def _session_identity(self, session_id: UUID) -> Identity:
+        with self.db.transaction() as session:
+            row = session.get(HumanSession, session_id)
+            if row is None or row.revoked_at or row.refresh_expires_at <= utcnow():
+                raise PlatformError("UNAUTHENTICATED", "Invalid or expired session")
+            user = session.scalar(select(User).where(User.subject == row.subject))
+            assert user is not None
+            return Identity(user.subject, user.email)
+
+    async def principal_for_session(self, session_id: UUID) -> Principal:
+        """Recheck long connections across access-token rotations and role withdrawal."""
+        identity = await database_call(self._session_identity, session_id)
         return await self.groups.principal(identity)
 
     async def refresh(self, token: str) -> Tokens:

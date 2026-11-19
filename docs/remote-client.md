@@ -19,6 +19,8 @@ Implemented commands:
 ```sh
 pixi run fl-client submit examples/job.yaml
 pixi run fl-client jobs
+pixi run fl-client clusters
+pixi run fl-client ssh CLUSTER_UUID --user fletcherlake
 pixi run fl-client status JOB_UUID
 pixi run fl-client status JOB_UUID --follow
 pixi run fl-client logs JOB_UUID --follow
@@ -42,6 +44,47 @@ forwarding. The stored profile determines the scheduler origin for subsequent co
 Logout revokes the remote session before removing local credentials; if the server is
 unreachable, the command fails and preserves them for a later retry. If credentials cannot be
 saved after a successful one-use refresh, log in again.
+
+## SSH into a cluster
+
+Operators and administrators can open a native SSH session from a Linux/macOS terminal
+without installing Tailscale or joining Headscale on that computer:
+
+```sh
+pixi run fl-client clusters
+pixi run fl-client ssh CLUSTER_UUID --user fletcherlake --identity ~/.ssh/id_ed25519
+# The local management CLI exposes the same remote command:
+pixi run fl cluster ssh CLUSTER_UUID --user fletcherlake
+# Optional one-shot command; preserves the remote exit status:
+pixi run fl-client ssh CLUSTER_UUID --user fletcherlake --command 'uname -a'
+```
+
+The first use can include `--scheduler https://scheduler.fl.ucb.bar` to start terminal
+login. Run as your normal user, without sudo. The calling machine needs OpenSSH and outbound
+HTTPS/WebSocket access to the public scheduler. The Mac must be enrolled, reachable from the
+scheduler on its Headscale address, and have Remote Login enabled. Its agent can be offline.
+The scheduler authorizes the tunnel; the Mac independently requires its existing SSH username
+and password or authorized key. This command does not install keys or grant a Mac account.
+
+OpenSSH carries its encrypted stream through a public WSS connection, which the scheduler
+forwards only to that registered cluster's private port 22. The scheduler cannot read the
+SSH terminal stream. Host keys are checked under `fl-cluster-CLUSTER_UUID` in your normal
+known_hosts file; verify the fingerprint on first use. `--known-hosts PATH` selects a
+preprovisioned file. Agent and automatic port forwarding are disabled. There is no browser
+terminal or public listener on the Mac.
+
+The scheduler records the requesting identity and connection open/close events, without
+recording commands or terminal contents. One-use connection tickets expire after 60 seconds.
+Connections last at most eight hours, with up to two pending/active connections per person,
+four per cluster, and 32 per scheduler process. Logout, withdrawn operator/admin membership,
+retirement, or a changed cluster address closes the tunnel at the next 30-second check
+(directory membership may also be cached for up to 60 seconds). Native SSH cannot resume
+across scheduler restarts: rerun the command.
+
+Deploy the scheduler code, public `/api/ssh/` WebSocket proxy configuration, and Headscale
+policy granting `tag:scheduler` access to `tag:cluster:22` together. No Mac agent upgrade is
+required for SSH. Tickets and limits are process-local; use the existing single scheduler
+worker. Multiple workers/replicas require shared ticket storage and global limits first.
 
 ## Job YAML and board selection
 
