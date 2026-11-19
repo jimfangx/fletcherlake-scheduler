@@ -49,6 +49,8 @@ fl-client --help
 
 From the Chipyard root, use `source software/fletcherlake-scheduler/sourceme-client.sh`.
 This prepares the locked client environment and makes `fl-client` available from any directory.
+Tab completion is enabled for the current session (zsh or Bash 4.4+), without editing shell
+startup files.
 See [remote client usage](docs/remote-client.md) for submission, monitoring, results and SSH.
 
 Install [Pixi](https://pixi.sh), then run:

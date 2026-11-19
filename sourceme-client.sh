@@ -19,7 +19,7 @@ else
 fi
 
 _fl_client_setup() {
-  local root launcher
+  local root launcher completion_code
   if ! command -v pixi >/dev/null 2>&1; then
     printf 'Pixi is required. Install it from https://pixi.sh, then source this script again.\n' >&2
     return 1
@@ -37,7 +37,23 @@ _fl_client_setup() {
     *":$launcher:"*) ;;
     *) export PATH="$launcher${PATH:+:$PATH}" ;;
   esac
-  printf 'fl-client is ready. Run: fl-client --help\n'
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    if ! typeset -f compdef >/dev/null 2>&1; then
+      autoload -Uz compinit
+      # Initialize only in memory: no .zcompdump, startup edits or interactive prompts.
+      compinit -D -i || return 1
+    fi
+    completion_code=$(_FL_CLIENT_COMPLETE=source_zsh "$launcher/fl-client") || return 1
+  elif [ "${BASH_VERSINFO[0]}" -gt 4 ] || {
+    [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ];
+  }; then
+    completion_code=$(_FL_CLIENT_COMPLETE=source_bash "$launcher/fl-client") || return 1
+  else
+    printf 'fl-client is ready. Completion requires Bash 4.4+ or zsh.\n'
+    return 0
+  fi
+  eval "$completion_code" || return 1
+  printf 'fl-client is ready with session-only completion. Run: fl-client --help\n'
 }
 
 if _fl_client_setup; then

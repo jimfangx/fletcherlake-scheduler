@@ -15,11 +15,14 @@ fl-client ssh CLUSTER_UUID --user fletcherlake
 
 From this repository's root, use `source sourceme-client.sh`. An absolute path works from
 any directory. The script supports Bash and zsh, installs/refreshes the locked Pixi environment,
-and adds this checkout's `bin` directory to `PATH` in the current shell. It preserves your
+and adds this checkout's `bin` directory to `PATH` in the current shell. It enables Tab completion
+for commands and options in this session (zsh or Bash 4.4+). It preserves your
 working directory and Python environment; job paths still resolve from where you run the command.
 Source it once in each new terminal, or add an absolute `source` line to your `.bashrc` or `.zshrc`.
-It does not log in automatically or modify those files. Existing `pixi run fl-client ...`
-commands also work without sourcing.
+It does not log in automatically or modify those files. Completion is loaded in memory;
+it does not install completion files or write a zsh completion cache. You do not need
+`fl-client --install-completion`, which installs persistent completion and may edit your shell
+startup file. Existing `pixi run fl-client ...` commands also work without sourcing.
 
 The command prints an HTTPS verification URL and a terminal code. Open the URL in any browser,
 sign in with Google, then enter the code shown on your own terminal. The browser can be on
