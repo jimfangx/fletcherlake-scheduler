@@ -5,6 +5,7 @@ from fl_deploy.manifest import Deployment
 from fl_deploy.render import render
 from websockets.asyncio.client import connect
 
+from ship.cloud.ssh_relay_config import SSH_LOCATION, proxy_config
 from tests.deployment import TEMPLATES, certificates, inventory, require_native_tools
 from tests.nginx_runtime import running_nginx, trust_local_certificate, upstream
 
@@ -16,6 +17,9 @@ async def test_real_https_routing_limits_and_private_websocket(tmp_path):
     manifest = Deployment.model_validate(data)
     certificates(tmp_path, manifest)
     files = render(manifest, TEMPLATES)
+    # Apply the same migration as an existing cloud host, then exercise the real proxy.
+    template = files["scheduler/scheduler-nginx.conf"]
+    files["scheduler/scheduler-nginx.conf"] = proxy_config(SSH_LOCATION.sub("", template), template)
     root = tmp_path / "nginx"
     root.mkdir(mode=0o700)
     context = trust_local_certificate(tmp_path)

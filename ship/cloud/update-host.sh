@@ -97,6 +97,9 @@ case "$FL_PHASE" in
     ;;
   start)
     test "$(readlink -f /opt/fl)" = "$FL_RELEASE"
+    if [ "$FL_ROLE" = scheduler ]; then
+      /opt/fl/.pixi/envs/default/bin/python /opt/fl/ship/cloud/ssh_relay_config.py /opt/fl
+    fi
     systemctl start "$FL_UNIT"
     curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 2 \
       --retry-max-time 90 --max-time 5 "http://127.0.0.1:$FL_PORT/healthz"

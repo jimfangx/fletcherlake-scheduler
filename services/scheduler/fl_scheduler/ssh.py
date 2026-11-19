@@ -204,27 +204,32 @@ class SshRelay:
         except (OSError, RuntimeError, WebSocketDisconnect, KeyError):
             reason = "SSH_DISCONNECTED"
         finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            if writer is not None:
-                writer.close()
-                try:
-                    async with asyncio.timeout(5):
-                        await writer.wait_closed()
-                except (OSError, TimeoutError):
-                    pass
             try:
-                await websocket.close(code=1000 if reason == "SSH_CLOSED" else 1008)
-            except (OSError, RuntimeError, WebSocketDisconnect):
-                pass
-            self.tickets.pop(session_id, None)
-            try:
-                await database_call(
-                    self.audit, ticket, "SSH_CLOSED" if opened else "SSH_DENIED", reason
-                )
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                if writer is not None:
+                    writer.close()
+                    try:
+                        async with asyncio.timeout(5):
+                            await writer.wait_closed()
+                    except (OSError, TimeoutError):
+                        pass
             finally:
-                self.handlers.discard(handler)
+                try:
+                    # Record closure before sending the close frame. A client/context can
+                    # cancel its handler immediately after receiving that frame.
+                    await database_call(
+                        self.audit, ticket, "SSH_CLOSED" if opened else "SSH_DENIED", reason
+                    )
+                finally:
+                    self.tickets.pop(session_id, None)
+                    try:
+                        await websocket.close(code=1000 if reason == "SSH_CLOSED" else 1008)
+                    except (OSError, RuntimeError, WebSocketDisconnect):
+                        pass
+                    finally:
+                        self.handlers.discard(handler)
 
     async def close(self) -> None:
         handlers = list(self.handlers)

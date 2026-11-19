@@ -11,7 +11,11 @@ checks without production access. The two existing GCP VMs are the cloud targets
 
 Application updates deploy the scheduler/dashboard and gateway code. PostgreSQL, Headscale,
 nginx, TLS, mounted data, credentials and service configuration retain their existing
-installation. Infrastructure/configuration changes use the operator deployment procedures.
+installation. Scheduler updates install the SSH relay's public WebSocket location and narrow
+`tag:scheduler` → `tag:cluster:22` policy rule, preserving the other installed configuration.
+Both configurations are backed up and validated before reloading nginx/Headscale; validation
+failures restore the previous files. Other infrastructure/configuration changes use the
+operator deployment procedures.
 Mac agents and user clients are updated separately. A breaking protocol/schema change needs
 a coordinated rollout to those clients; CI cannot establish compatibility with physical boards.
 
@@ -116,6 +120,10 @@ Bootstrap configures access; the workflow becomes active when its files reach `m
 4. It runs `alembic upgrade head` using the scheduler's existing environment, starts/checks
    the gateway and transfer SSH server, then starts/checks the scheduler and public health
    endpoint. `/opt/fl/DEPLOYED_REVISION` on each host identifies the deployed commit.
+   Before starting the scheduler it runs `ship/cloud/ssh_relay_config.py` to install/validate
+   the SSH proxy and ACL. Existing installations can apply the same update with
+   `sudo /opt/fl/.pixi/envs/default/bin/python /opt/fl/ship/cloud/ssh_relay_config.py /opt/fl`
+   on the scheduler VM. Configuration backups are under `/var/backups/fl-ssh-relay`.
 
 Expect a short service/transfer interruption during steps 3–4; physical Mac jobs keep their
 local execution and queues. Interrupted user submissions can resume with their saved receipt.

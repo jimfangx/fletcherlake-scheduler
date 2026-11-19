@@ -16,7 +16,7 @@ from fl_common.files import atomic_write
 from fl_common.models.base import Schema, utcnow
 from fl_common.network import https_origin
 from pydantic import AwareDatetime, SecretStr, field_validator
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidStatus
 from websockets.sync.client import connect
 
 from .api import RemoteClient
@@ -133,6 +133,18 @@ def main() -> int:
         if len(sys.argv) != 2:
             raise ValueError("SSH proxy requires a protected ticket file")
         return proxy(Path(sys.argv[1]))
+    except InvalidStatus as error:
+        status = error.response.status_code
+        hint = {
+            400: "check the scheduler WebSocket proxy configuration",
+            403: "SSH ticket rejected; retry and check operator/admin access",
+            404: "scheduler SSH WebSocket route is missing; update its nginx configuration",
+            426: "check the scheduler WebSocket Upgrade headers",
+            502: "scheduler SSH service is unavailable",
+            503: "scheduler SSH service is unavailable",
+        }.get(status, "check the scheduler SSH service")
+        print(f"SSH tunnel rejected (HTTP {status}): {hint}", file=sys.stderr)
+        return 1
     except (PlatformError, OSError, ValueError, ConnectionClosed) as error:
         message = error.message if isinstance(error, PlatformError) else type(error).__name__
         print("SSH tunnel: " + message, file=sys.stderr)
