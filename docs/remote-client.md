@@ -3,11 +3,23 @@
 `fl-client` runs as an ordinary Linux/macOS user and contacts the public scheduler through
 HTTPS. It does not enroll the user machine in Headscale or access a Mac directly.
 
-Install the repository's locked environment, then log in:
+Install [Pixi](https://pixi.sh) once. From a Chipyard checkout containing this repository,
+source the client setup script, then use `fl-client` directly:
 
 ```sh
-pixi run fl-client login --scheduler https://scheduler.example.edu
+source software/fletcherlake-scheduler/sourceme-client.sh
+fl-client login --scheduler https://scheduler.fl.ucb.bar
+fl-client clusters
+fl-client ssh CLUSTER_UUID --user fletcherlake
 ```
+
+From this repository's root, use `source sourceme-client.sh`. An absolute path works from
+any directory. The script supports Bash and zsh, installs/refreshes the locked Pixi environment,
+and adds this checkout's `bin` directory to `PATH` in the current shell. It preserves your
+working directory and Python environment; job paths still resolve from where you run the command.
+Source it once in each new terminal, or add an absolute `source` line to your `.bashrc` or `.zshrc`.
+It does not log in automatically or modify those files. Existing `pixi run fl-client ...`
+commands also work without sourcing.
 
 The command prints an HTTPS verification URL and a terminal code. Open the URL in any browser,
 sign in with Google, then enter the code shown on your own terminal. The browser can be on

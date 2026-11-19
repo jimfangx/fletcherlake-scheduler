@@ -38,6 +38,19 @@ ACL ports and pinned SSH endpoints consistent. See [Linux deployment](docs/linux
 
 ## Development
 
+For the remote terminal client, install [Pixi](https://pixi.sh), then source the setup script
+once per shell (Bash or zsh):
+
+```sh
+source sourceme-client.sh
+fl-client login --scheduler https://scheduler.fl.ucb.bar
+fl-client --help
+```
+
+From the Chipyard root, use `source software/fletcherlake-scheduler/sourceme-client.sh`.
+This prepares the locked client environment and makes `fl-client` available from any directory.
+See [remote client usage](docs/remote-client.md) for submission, monitoring, results and SSH.
+
 Install [Pixi](https://pixi.sh), then run:
 
 ```sh

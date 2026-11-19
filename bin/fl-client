@@ -1,0 +1,9 @@
+#!/bin/sh
+# Use this checkout's managed Python while preserving the caller's working directory.
+fl_client_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P) || exit 1
+fl_client_executable="$fl_client_root/.pixi/envs/default/bin/fl-client"
+if [ ! -x "$fl_client_executable" ]; then
+  printf 'Prepare the client first: source "%s/sourceme-client.sh"\n' "$fl_client_root" >&2
+  exit 1
+fi
+exec "$fl_client_executable" "$@"
