@@ -13,9 +13,10 @@ from fl_agent.configuration import DEFAULT_RUNTIME_ROOT, DEFAULT_STATE_ROOT
 from fl_agent.detection import detect_host, merge_overrides
 from fl_common.models import ClusterConfig
 
+from .help_tree import CommandTreeGroup
 from .provisioning import ensure_root, require_macos, run
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(no_args_is_help=True, cls=CommandTreeGroup)
 
 
 def parse_config(path: Path | None, interactive: bool = False) -> ClusterConfig:

@@ -24,7 +24,7 @@ def operator(tmp_path):
     git(repo, "init")
     (repo / "ship").mkdir()
     shutil.copyfile(SCRIPT, repo / "ship/18-bringup-mac.sh")
-    for name in ("19-2-update-existing-mac.sh", "mac-update.py"):
+    for name in ("19-2-update-existing-mac.sh", "mac-update.py", "setup-mac-cli-shell.sh"):
         shutil.copyfile(SCRIPT.parent / name, repo / "ship" / name)
     for name in ("pixi.toml", "pixi.lock", "pyproject.toml"):
         (repo / name).write_text("original\n")

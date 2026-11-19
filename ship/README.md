@@ -49,6 +49,13 @@ the Mac and is never passed in SSH arguments. Setup enrolls the agent, installs 
 prints status. Use LAN SSH or a connection that will survive joining the deployment's
 Headscale network: enrollment may disconnect SSH using a different existing Tailscale tailnet.
 
+Install and update scripts provide `fl` and `fletcherlake` in `/usr/local/bin`, pointing to
+the active CLI under `/opt/fl`. They add a managed PATH block to the SSH user's `.zshrc`
+(or `$ZDOTDIR/.zshrc`) and preserve a backup before its first edit. Open a new terminal or
+run `source ~/.zshrc` to use the commands. Existing unrelated commands with either name
+are reported rather than overwritten. Running `fl` or `fl --help` shows the full command
+tree, including required arguments. For example, confirmation is `sudo fl cluster setup confirm /opt/fl`.
+
 This is initial installation. An already enrolled/running Mac is rejected before application
 files are replaced; use `19-2-update-existing-mac.sh` for an existing installation.
 If enrollment succeeded but confirmation was interrupted, run

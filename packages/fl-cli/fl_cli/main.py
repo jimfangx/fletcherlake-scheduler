@@ -10,10 +10,11 @@ from fl import Cluster
 from fl_common.models import JobConfig
 
 from . import lifecycle, setup
+from .help_tree import CommandTreeGroup
 
-app = typer.Typer(no_args_is_help=True)
-cluster_app = typer.Typer(no_args_is_help=True)
-job_app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(no_args_is_help=True, cls=CommandTreeGroup)
+cluster_app = typer.Typer(no_args_is_help=True, cls=CommandTreeGroup)
+job_app = typer.Typer(no_args_is_help=True, cls=CommandTreeGroup)
 app.add_typer(cluster_app, name="cluster")
 app.add_typer(job_app, name="job")
 cluster_app.add_typer(setup.app, name="setup")

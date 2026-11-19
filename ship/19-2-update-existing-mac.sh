@@ -77,7 +77,7 @@ with tarfile.open(archive, "w", dereference=False) as bundle:
             continue
         if source.is_file() or source.is_symlink():
             bundle.add(source, arcname=str(relative), recursive=False)
-    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "ship/mac-update.py", "packages/lilikoi/host/lilikoi/__init__.py"):
+    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "ship/mac-update.py", "ship/setup-mac-cli-shell.sh", "packages/lilikoi/host/lilikoi/__init__.py"):
         bundle.getmember(required)
 print(f"Built current Mac sources: {archive} ({archive.stat().st_size:,} bytes)")
 PY
@@ -97,10 +97,23 @@ if [ "$(sw_vers -productVersion | cut -d. -f1)" -lt 13 ]; then
 fi
 xcode-select -p
 sudo -v
-sudo test -f '/Library/Application Support/fl/credentials.json'
-sudo test -f '/Library/Application Support/fl/cluster.yaml'
-sudo test -f /Library/LaunchDaemons/edu.berkeley.fletcherlake.agent.plist
-sudo launchctl print system/edu.berkeley.fletcherlake.agent >/dev/null
+if ! sudo test -f '/Library/Application Support/fl/credentials.json'; then
+  printf 'This Mac has not completed enrollment (credentials.json is missing).\n' >&2
+  printf 'Complete enrollment with ship/18-bringup-mac.sh before running this update.\n' >&2
+  exit 1
+fi
+if ! sudo test -f '/Library/Application Support/fl/cluster.yaml'; then
+  printf 'The enrolled Mac is missing /Library/Application Support/fl/cluster.yaml.\n' >&2
+  printf 'Restore its existing inventory before updating.\n' >&2
+  exit 1
+fi
+if ! sudo test -f /Library/LaunchDaemons/edu.berkeley.fletcherlake.agent.plist ||
+   ! sudo launchctl print system/edu.berkeley.fletcherlake.agent >/dev/null 2>&1; then
+  printf 'The enrolled Mac agent is not installed or running. On the Mac, run:\n' >&2
+  printf '  sudo /opt/fl/.pixi/envs/default/bin/fl cluster setup confirm /opt/fl\n' >&2
+  printf 'Then retry this update.\n' >&2
+  exit 1
+fi
 # Recover an interrupted installation with setup confirm before attempting an update.
 sudo /opt/fl/.pixi/envs/default/bin/fl cluster status
 test -x /usr/local/bin/pixi
@@ -137,6 +150,7 @@ if ! sudo env PATH="$PATH" "$FL_PYTHON" "$FL_RELEASE/ship/mac-update.py" "$FL_RE
   printf '  sudo /opt/fl/.pixi/envs/default/bin/fl cluster setup confirm /opt/fl\n' >&2
   exit 1
 fi
+bash /opt/fl/ship/setup-mac-cli-shell.sh
 sudo /opt/fl/.pixi/envs/default/bin/fl cluster status
 printf '\nMac agent updated: %s\n' "$FL_RELEASE"
 printf 'Previous source/environment retained; metadata backup: %s/previous-installation\n' "$FL_RELEASE"

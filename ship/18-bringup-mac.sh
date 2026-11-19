@@ -72,7 +72,7 @@ with tarfile.open(archive, "w", dereference=False) as bundle:
             continue
         if source.is_file() or source.is_symlink():
             bundle.add(source, arcname=str(relative), recursive=False)
-    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "packages/lilikoi/host/lilikoi/__init__.py"):
+    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "ship/setup-mac-cli-shell.sh", "packages/lilikoi/host/lilikoi/__init__.py"):
         bundle.getmember(required)
 print(f"Built current Mac sources: {archive} ({archive.stat().st_size:,} bytes)")
 PY
@@ -133,6 +133,7 @@ cd /opt/fl
 sudo /usr/local/bin/pixi install --locked
 FL_PYTHON=/opt/fl/.pixi/envs/default/bin/python
 FL_CLI=/opt/fl/.pixi/envs/default/bin/fl
+bash /opt/fl/ship/setup-mac-cli-shell.sh
 if [ "$FL_CONFIG_SUPPLIED" != 1 ]; then
   "$FL_PYTHON" -m fl_cli.mac_inventory "$FL_CONFIG"
 fi
