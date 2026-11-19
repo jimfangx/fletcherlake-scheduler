@@ -1,6 +1,11 @@
 # Mac deployment
 
-`18-bringup-mac.sh` installs a **new Mac agent** that hosts boards. The installation also
+`18-bringup-mac.sh` performs a **destructive fresh installation** of the Mac agent that hosts boards.
+It stops the old agent and its helper processes, then deletes `/opt/fl`, `/opt/fl-releases`,
+`/opt/fl-tools`, `/Library/Application Support/fl`, `/Library/Application Support/fl-retired`
+and `/var/run/fl`. Existing credentials, enrollment receipts, configuration, job history,
+queued work, retained artifacts and release backups in those directories are permanently removed.
+It requires a fresh enrollment ticket and creates a new cluster UUID. The installation also
 provides the local dashboard and the `fl-client` submission CLI. Run it on your operator
 computer from a terminal:
 
@@ -56,8 +61,13 @@ run `source ~/.zshrc` to use the commands. Existing unrelated commands with eith
 are reported rather than overwritten. Running `fl` or `fl --help` shows the full command
 tree, including required arguments. For example, confirmation is `sudo fl cluster setup confirm /opt/fl`.
 
-This is initial installation. An already enrolled/running Mac is rejected before application
-files are replaced; use `19-2-update-existing-mac.sh` for an existing installation.
+This reset runs on every invocation, including on an already enrolled/running Mac, without
+an extra confirmation prompt. The operator's `~/cluster-overrides.yaml`, shell settings,
+Homebrew and Tailscale installation are retained. The reset removes local state; old
+server-side cluster records remain in the scheduler. A previously registered cluster must
+be retired separately before reusing its board IDs/network node for a fresh enrollment.
+Use `19-2-update-existing-mac.sh`
+when updating an existing installation while preserving its enrollment, configuration and jobs.
 If enrollment succeeded but confirmation was interrupted, run
 `sudo /opt/fl/.pixi/envs/default/bin/fl cluster setup confirm /opt/fl` on the Mac. Inspect the
 individual board states after deployment; the blank SophiaLake backend stays in `ERROR`

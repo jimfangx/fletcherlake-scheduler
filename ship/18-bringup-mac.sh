@@ -2,8 +2,10 @@
 # Usage: FL_DOMAIN=fl.ucb.bar bash ship/18-bringup-mac.sh SSH_HOST [LOCAL_BOARD_OVERRIDES]
 # SSH_HOST may be an alias from ~/.ssh/config. No identity, port or config overrides are used.
 # By default, prompts on the Mac create ~/cluster-overrides.yaml; a file is optional.
-# This installs a NEW board-hosting Mac agent, including its local UI and fl-client CLI.
+# DESTRUCTIVE: replaces the local installation, credentials, queues, history and retained files.
+# Installs a fresh board-hosting Mac agent, including its local UI and fl-client CLI.
 # Requires macOS 13+, Command Line Tools, approved/running Tailscale, SSH and sudo access.
+# Example: FL_DOMAIN=fl.ucb.bar bash ship/18-bringup-mac.sh fletcherlake@100.87.187.80
 if [ -z "${BASH_VERSION:-}" ]; then
   printf 'Run this script with bash.\n' >&2
   return 1 2>/dev/null || exit 1
@@ -72,7 +74,7 @@ with tarfile.open(archive, "w", dereference=False) as bundle:
             continue
         if source.is_file() or source.is_symlink():
             bundle.add(source, arcname=str(relative), recursive=False)
-    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "ship/setup-mac-cli-shell.sh", "packages/lilikoi/host/lilikoi/__init__.py"):
+    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "ship/setup-mac-cli-shell.sh", "ship/reset-mac-installation.py", "packages/lilikoi/host/lilikoi/__init__.py"):
         bundle.getmember(required)
 print(f"Built current Mac sources: {archive} ({archive.stat().st_size:,} bytes)")
 PY
@@ -115,12 +117,10 @@ if [ "$FL_CONFIG_SUPPLIED" = 1 ]; then
   FL_CONFIG="$FL_STAGE/cluster-overrides.yaml"
 fi
 sudo -v
-if sudo launchctl print system/edu.berkeley.fletcherlake.agent >/dev/null 2>&1 ||
-   sudo test -f '/Library/Application Support/fl/credentials.json'; then
-  printf 'This Mac is already enrolled. Use ship/19-2-update-existing-mac.sh SSH_HOST to update it.\n' >&2
-  printf 'If enrollment succeeded but installation was interrupted, run setup confirm /opt/fl on the Mac.\n' >&2
-  exit 1
-fi
+# Stage the reset helper outside the application roots it removes. It uses Apple's Python
+# so a broken/missing old Pixi environment cannot prevent the fresh installation.
+tar -xf "$FL_STAGE/source.tar" -C "$FL_STAGE" ship/reset-mac-installation.py
+sudo /usr/bin/python3 "$FL_STAGE/ship/reset-mac-installation.py"
 sudo install -d -m 755 /opt/fl
 sudo tar -xf "$FL_STAGE/source.tar" -C /opt/fl
 sudo chmod -R a+rX /opt/fl
