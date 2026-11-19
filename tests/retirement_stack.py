@@ -85,16 +85,26 @@ async def retirement_stack(auth_stack, scheduler_db, tmp_path):
         transport = httpx.MockTransport(bridge_local)
         return Cluster(httpx.Client(base_url="http://fl-agent", transport=transport))
 
+    join_hostnames = []
+
     def tailscale(argv):
         assert "private-join-key" not in repr(argv)
         if argv[1] == "up":
+            join_hostnames.append(argv[argv.index("--hostname") + 1])
             path = Path(argv[argv.index("--auth-key") + 1].removeprefix("file:"))
             joins.append(network.join(path.read_text().removeprefix("private-join-key-")))
             return ""
         if argv[1] == "logout":
             calls.append("logout")
             return ""
-        return json.dumps({"BackendState": "Running", "Self": {"PublicKey": joins[-1].node_key}})
+        if not joins or not join_hostnames:
+            return json.dumps({"BackendState": "NeedsLogin"})
+        return json.dumps(
+            {
+                "BackendState": "Running",
+                "Self": {"PublicKey": joins[-1].node_key, "HostName": join_hostnames[-1]},
+            }
+        )
 
     try:
         with TestClient(app, base_url="https://scheduler.test") as server:

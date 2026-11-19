@@ -74,7 +74,7 @@ with tarfile.open(archive, "w", dereference=False) as bundle:
             continue
         if source.is_file() or source.is_symlink():
             bundle.add(source, arcname=str(relative), recursive=False)
-    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "ship/setup-mac-cli-shell.sh", "ship/reset-mac-installation.py", "packages/lilikoi/host/lilikoi/__init__.py"):
+    for required in ("pixi.toml", "pixi.lock", "pyproject.toml", "ship/setup-mac-cli-shell.sh", "ship/reset-mac-installation.py", "ship/enroll-mac-background.py", "packages/lilikoi/host/lilikoi/__init__.py"):
         bundle.getmember(required)
 print(f"Built current Mac sources: {archive} ({archive.stat().st_size:,} bytes)")
 PY
@@ -132,7 +132,6 @@ sudo env PIXI_VERSION="$FL_PIXI_VERSION" PIXI_HOME=/opt/pixi PIXI_BIN_DIR=/usr/l
 cd /opt/fl
 sudo /usr/local/bin/pixi install --locked
 FL_PYTHON=/opt/fl/.pixi/envs/default/bin/python
-FL_CLI=/opt/fl/.pixi/envs/default/bin/fl
 bash /opt/fl/ship/setup-mac-cli-shell.sh
 if [ "$FL_CONFIG_SUPPLIED" != 1 ]; then
   "$FL_PYTHON" -m fl_cli.mac_inventory "$FL_CONFIG"
@@ -170,10 +169,11 @@ if [ "$FL_NEEDS_LILIKOI" = yes ]; then
 fi
 printf '\nCreate an enrollment ticket at https://scheduler.%s/admin/clusters.\n' "$FL_DOMAIN"
 printf 'Enter it at the hidden prompt below.\n'
-sudo env PATH="$PATH" "$FL_CLI" cluster setup init "$FL_CONFIG" --scheduler "https://scheduler.$FL_DOMAIN"
-sudo env PATH="$PATH" "$FL_CLI" cluster setup confirm /opt/fl
-sudo "$FL_CLI" cluster status
-printf '\nAgent installed. Local dashboard: sudo /opt/fl/.pixi/envs/default/bin/fl cluster status --dashboard\n'
+printf 'Enrollment switches this Mac to Headscale and may disconnect Tailscale SSH.\n'
+sudo env PATH="$PATH" "$FL_PYTHON" /opt/fl/ship/enroll-mac-background.py \
+  --config "$FL_CONFIG" --scheduler "https://scheduler.$FL_DOMAIN"
+printf '\nBackground enrollment queued. It will enroll, confirm and connect the agent to the scheduler.\n'
+printf 'Check the cluster at https://scheduler.%s/clusters.\n' "$FL_DOMAIN"
 printf 'Remote submission CLI: /opt/fl/.pixi/envs/default/bin/fl-client\n'
 MAC
 

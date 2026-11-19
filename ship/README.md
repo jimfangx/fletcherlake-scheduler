@@ -50,9 +50,27 @@ owning account and builds native `uart_tsi`. Firmware flashing remains a board p
 
 Installation prompts for sudo, then for a fresh enrollment ticket from
 `https://scheduler.<domain>/admin/clusters`. The ticket is entered at a hidden prompt on
-the Mac and is never passed in SSH arguments. Setup enrolls the agent, installs launchd and
-prints status. Use LAN SSH or a connection that will survive joining the deployment's
-Headscale network: enrollment may disconnect SSH using a different existing Tailscale tailnet.
+the Mac and is never passed in SSH arguments. After collecting the ticket and resolved inventory,
+setup hands enrollment and confirmation to `edu.berkeley.fletcherlake.enrollment` under launchd.
+Its protected request and progress files live under `/Library/Application Support/fl`, and its
+logs are `logs/enrollment.stdout.log` and `logs/enrollment.stderr.log` there. The foreground
+script reports that work is queued, rather than claiming the agent is already enrolled.
+The job continues after SSH disconnects: it joins Headscale, registers the cluster, confirms
+the installation and waits for the agent's scheduler connection. It retries transient failures
+for up to ten minutes and records `COMPLETE` or `FAILED` in `enrollment-progress.json`.
+Successful enrollment removes the staged ticket request. The cluster is then visible at
+`https://scheduler.<domain>/clusters`; individual hardware errors are reported separately.
+
+Enrollment explicitly resets Tailscale settings and reauthenticates with the issued key,
+which can disconnect Tailscale SSH. A retry recognizes a successfully joined node for the same ticket
+and resumes registration without reusing its one-time join key. Tailscale failures include
+the command's diagnostic with authentication keys redacted.
+
+On the target Mac, inspect progress with
+`sudo cat '/Library/Application Support/fl/enrollment-progress.json'`. To resume a queued or
+failed attempt with its saved ticket/configuration, run
+`sudo /opt/fl/.pixi/envs/default/bin/python /opt/fl/ship/enroll-mac-background.py --resume`.
+An expired/revoked ticket needs a new destructive installation and a fresh ticket.
 
 Install and update scripts provide `fl` and `fletcherlake` in `/usr/local/bin`, pointing to
 the active CLI under `/opt/fl`. They add a managed PATH block to the SSH user's `.zshrc`

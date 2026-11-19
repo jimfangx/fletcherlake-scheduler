@@ -53,13 +53,25 @@ def test_macos_setup_recovers_lost_registration_response(
         calls.append(argv)
         assert "private-join-key" not in repr(argv)
         if argv[1] == "up":
+            assert {"--reset", "--force-reauth", "--accept-risk=lose-ssh"}.issubset(argv)
             key_file = Path(argv[argv.index("--auth-key") + 1].removeprefix("file:"))
             assert key_file.stat().st_mode & 0o777 == 0o600
             assert key_file.read_text() == "private-join-key-1"
             joined.append(network.join("1"))
             return ""
         assert argv[1:] == ["status", "--json"]
-        return json.dumps({"BackendState": "Running", "Self": {"PublicKey": joined[0].node_key}})
+        if not joined:
+            return json.dumps({"BackendState": "NeedsLogin"})
+        up = next(call for call in reversed(calls) if call[1] == "up")
+        return json.dumps(
+            {
+                "BackendState": "Running",
+                "Self": {
+                    "PublicKey": joined[0].node_key,
+                    "HostName": up[up.index("--hostname") + 1],
+                },
+            }
+        )
 
     with TestClient(app, base_url="https://scheduler.test") as server:
         response = server.post(

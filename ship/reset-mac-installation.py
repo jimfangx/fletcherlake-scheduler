@@ -9,7 +9,11 @@ import sys
 import time
 from pathlib import Path
 
-LABELS = ("edu.berkeley.fletcherlake.agent", "edu.berkeley.fletcherlake.retention")
+LABELS = (
+    "edu.berkeley.fletcherlake.enrollment",
+    "edu.berkeley.fletcherlake.agent",
+    "edu.berkeley.fletcherlake.retention",
+)
 ROOTS = (
     Path("/opt/fl"),
     Path("/opt/fl-releases"),

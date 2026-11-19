@@ -29,6 +29,7 @@ def operator(tmp_path):
         "mac-update.py",
         "setup-mac-cli-shell.sh",
         "reset-mac-installation.py",
+        "enroll-mac-background.py",
     ):
         shutil.copyfile(SCRIPT.parent / name, repo / "ship" / name)
     for name in ("pixi.toml", "pixi.lock", "pyproject.toml"):
