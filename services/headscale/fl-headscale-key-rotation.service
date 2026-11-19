@@ -1,0 +1,18 @@
+[Unit]
+Description=Rotate the scheduler Headscale API credential before expiry
+After=headscale.service fl-scheduler.service
+ConditionPathExists=/etc/fl/scheduler.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/fl-rotate-headscale-key.py
+TimeoutStartSec=300
+UMask=0077
+StateDirectory=fl-headscale-key-rotation
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/fl
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

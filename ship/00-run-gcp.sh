@@ -80,7 +80,5 @@ export FL_MAC_SSH=yf328@bwrc-lab04.eecs.berkeley.edu # must be reachable from th
 
 source ./bringup-mac.sh
 
-# Run the remaining scripts in a Bash shell on the new Mac, not on this operator host:
-# source ship/run-on-new-mac.sh
-
-# source ship/init-registration-new-mac-with-scheduler.sh
+# Install a new Mac agent separately from the operator computer:
+# FL_DOMAIN=fl.ucb.bar bash ship/18-bringup-mac.sh my-mac

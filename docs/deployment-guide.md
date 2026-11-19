@@ -1390,7 +1390,11 @@ database and Noise key together. See [Headscale operations](headscale-operations
 
 ### Rotating the scheduler's Headscale API key
 
-For an existing deployment with section 9 completed, rotate before the 30-day deadline.
+Current bootstrap and cloud updates install `fl-headscale-key-rotation.timer`, which checks
+hourly and replaces the 30-day scheduler key when seven days remain. See
+[automatic key rotation](headscale-operations.md) for installation, status and recovery.
+The following procedure is available for manual recovery on an existing deployment with
+section 9 completed.
 The same procedure recovers an already expired API key: the administrative Headscale CLI
 uses the coordinator's local Unix socket. The scheduler's enrollment encryption key
 (`FL_ENROLLMENT_ENCRYPTION_KEY`) is a separate persistent secret and stays unchanged.
@@ -1486,8 +1490,8 @@ flssh scheduler "sudo -u headscale headscale --config /etc/headscale/config.yaml
 flssh scheduler 'rm -f "$HOME/fl-secrets/headscale-api-key.next"'
 ```
 
-Set an operator reminder before the next deadline; this repository does not install automatic
-API-key rotation. Source: [Headscale 0.29.4 API-key CLI](https://github.com/juanfont/headscale/blob/v0.29.4/cmd/headscale/cli/api_key.go).
+If automatic rotation has not been installed, set an operator reminder before the next deadline.
+Source: [Headscale 0.29.4 API-key CLI](https://github.com/juanfont/headscale/blob/v0.29.4/cmd/headscale/cli/api_key.go).
 
 ## 7. Render and install deployment bundles
 

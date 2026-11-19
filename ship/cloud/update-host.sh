@@ -49,6 +49,9 @@ case "$FL_PHASE" in
     nginx -t
     ;;
   stop)
+    if [ "$FL_ROLE" = scheduler ] && systemctl cat fl-headscale-key-rotation.timer >/dev/null 2>&1; then
+      systemctl stop fl-headscale-key-rotation.timer fl-headscale-key-rotation.service
+    fi
     systemctl stop "$FL_UNIT"
     if [ "$FL_ROLE" = gateway ]; then systemctl stop fl-transfer-sshd; fi
     ;;
@@ -104,6 +107,9 @@ case "$FL_PHASE" in
     fi
     systemctl is-active --quiet "$FL_UNIT"
     test "$(cat /opt/fl/DEPLOYED_REVISION)" = "$FL_REVISION"
+    if [ "$FL_ROLE" = scheduler ]; then
+      bash /opt/fl/ship/cloud/install-headscale-key-rotation.sh
+    fi
     ;;
   *) printf 'Unknown phase: %s\n' "$FL_PHASE" >&2; exit 2 ;;
 esac

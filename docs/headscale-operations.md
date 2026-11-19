@@ -74,7 +74,29 @@ its `/api/` routes. Do not expose agent listeners, PostgreSQL, or the Headscale 
 on the public host address.
 
 Create a Headscale administrative API key on the coordinator, set an explicit expiration,
-and inject it into the scheduler's protected environment file. Rotate it before expiry.
+and inject it into the scheduler's protected environment file. The bootstrap and cloud update
+scripts install `fl-headscale-key-rotation.timer` to check it hourly. Seven days before expiry,
+it creates a new 30-day key through Headscale's local administrative socket, verifies API access,
+replaces the protected environment setting and restarts the scheduler. It expires the old key
+only after the scheduler loads the replacement and passes health/API checks. A failed restart
+restores the old setting and retains the old key for recovery. An interrupted file update is
+recovered on the next run. Rotation briefly disconnects the dashboard/API and agent WebSockets;
+agents reconnect. Cloud updates pause rotation while the deployment is in progress.
+
+On an existing scheduler, install it from a current checkout:
+
+```sh
+sudo bash /opt/fl/ship/cloud/install-headscale-key-rotation.sh
+sudo systemctl list-timers fl-headscale-key-rotation.timer
+sudo /usr/bin/python3 /usr/local/libexec/fl-rotate-headscale-key.py --check
+```
+
+Use `--force` instead of `--check` for an immediate rotation. Inspect failures with
+`sudo journalctl -u fl-headscale-key-rotation.service`. The active protected credential is in
+`/etc/fl/scheduler.env`; bootstrap/operator key copies become historical after automatic rotation
+and must not be copied back over the active setting. The environment backup for the latest
+automatic rotation is `/var/lib/fl-headscale-key-rotation/scheduler.env.before-rotation`.
+
 For protected AWS/GCP commands, see
 [API-key rotation](deployment-guide.md#rotating-the-schedulers-headscale-api-key). The scheduler
 loads the replacement on restart; existing Mac node identities remain enrolled.

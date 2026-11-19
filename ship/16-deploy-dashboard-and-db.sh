@@ -88,6 +88,7 @@ if ! curl --fail --silent --show-error --retry 15 --retry-connrefused \
   exit 1
 fi
 sudo systemctl reload nginx
+sudo bash /opt/fl/ship/cloud/install-headscale-key-rotation.sh
 HOST
 curl --fail --silent --show-error --retry 15 --retry-connrefused \
   --retry-delay 2 --retry-max-time 60 --max-time 5 "https://scheduler.$FL_DOMAIN/healthz"

@@ -91,6 +91,6 @@ correct any error before running the printed `setup confirm /opt/fl` recovery co
 Do not delete a release referenced by `/opt/fl` or a launchd definition. For inventory edits,
 use `fl cluster setup reconfigure /opt/fl --config /path/to/new-config.yaml` separately.
 
-Scripts `19-run-on-new-mac.sh` and `20` are the original manual Mac steps; they are not additional steps after
-a successful `18` deployment. The numbered `00` driver still references the old filenames
-from before the rename and must be updated before use. Run `18` directly as shown above.
+For a new Mac, run `18-bringup-mac.sh` directly as shown above. The old manual setup scripts
+have been removed. The numbered `00` driver is an older deployment guide and is not a supported
+way to install a Mac agent.

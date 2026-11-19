@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the scheduler Headscale API credential hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=10m
+Persistent=true
+Unit=fl-headscale-key-rotation.service
+
+[Install]
+WantedBy=timers.target
